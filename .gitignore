@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Environment and local state
+.env
+*.sqlite3
+*.db
+
+# Generated data and model artifacts
+data/raw/
+data/processed/
+backend/app/ml/models/*.joblib
+backend/app/ml/models/*.pkl
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
