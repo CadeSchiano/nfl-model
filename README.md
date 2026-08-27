@@ -36,6 +36,5 @@ Run the test suite from `backend/` with `pytest tests -q`.
 
 ## Current phase
 
-Phase 5 imports live NFL moneyline and spread snapshots from The Odds API.
-Raw American prices are converted to no-vig market probabilities before model
-disagreement is calculated; snapshots are append-only.
+Phase 6 provides SQLite development tables and public FastAPI routes for games,
+predictions, odds, and performance. Prediction creation is locked after kickoff.

@@ -1,0 +1,45 @@
+"""SQLAlchemy setup for the V0.1 SQLite development database."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Generator
+from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+
+def _database_url() -> str:
+    return os.environ.get(
+        "DATABASE_URL",
+        f"sqlite:///{Path(__file__).resolve().parents[3] / 'data' / 'nfl_model.db'}",
+    )
+
+
+def make_engine(url: str):
+    options = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
+    return create_engine(url, **options)
+
+
+engine = make_engine(_database_url())
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+
+class Base(DeclarativeBase):
+    """Base class for all V0.1 database tables."""
+
+
+def get_db() -> Generator[Session, None, None]:
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def initialize_database() -> None:
+    """Create the V0.1 tables when they do not yet exist."""
+    from app.models import game, odds, prediction  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
