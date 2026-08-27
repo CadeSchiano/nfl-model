@@ -8,6 +8,6 @@ def test_moneyline_grading() -> None:
 
 
 def test_spread_grading_supports_win_loss_and_push() -> None:
-    assert grade_spread(-3, 7) == "WIN"
-    assert grade_spread(-3, 2) == "LOSS"
-    assert grade_spread(-3, 3) == "PUSH"
+    assert grade_spread(6, -3, 7) == "WIN"
+    assert grade_spread(6, -3, 2) == "LOSS"
+    assert grade_spread(6, -3, 3) == "PUSH"

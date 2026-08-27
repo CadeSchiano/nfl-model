@@ -13,6 +13,7 @@ class Prediction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     game_id: Mapped[str] = mapped_column(ForeignKey("games.id"), index=True)
+    odds_id: Mapped[int | None] = mapped_column(ForeignKey("odds.id"), nullable=True)
     model_version: Mapped[str] = mapped_column(String(64), index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     home_win_probability: Mapped[float] = mapped_column(Float)

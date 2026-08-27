@@ -6,7 +6,7 @@ import os
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -43,3 +43,7 @@ def initialize_database() -> None:
     from app.models import game, odds, prediction  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    columns = {column["name"] for column in inspect(engine).get_columns("predictions")}
+    if "odds_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE predictions ADD COLUMN odds_id INTEGER"))

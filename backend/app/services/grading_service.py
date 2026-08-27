@@ -17,8 +17,11 @@ def grade_moneyline(home_probability: float, home_score: int, away_score: int) -
     return "WIN" if predicted_home == actual_home else "LOSS"
 
 
-def grade_spread(home_spread: float, actual_home_margin: float) -> str:
-    outcome = actual_home_margin + home_spread
+def grade_spread(predicted_margin: float, home_spread: float, actual_home_margin: float) -> str:
+    market_home_margin = -home_spread
+    if predicted_margin == market_home_margin:
+        return "PUSH"
+    outcome = actual_home_margin + home_spread if predicted_margin > market_home_margin else -actual_home_margin - home_spread
     if outcome == 0:
         return "PUSH"
     return "WIN" if outcome > 0 else "LOSS"
@@ -37,9 +40,9 @@ def grade_completed_predictions(session: Session) -> int:
         session.add(Result(
             prediction_id=prediction.id,
             moneyline_result=grade_moneyline(prediction.home_win_probability, game.home_score, game.away_score),
-            spread_result=grade_spread(prediction.market_spread, margin) if prediction.market_spread is not None else None,
+            spread_result=grade_spread(prediction.predicted_margin, prediction.market_spread, margin) if prediction.predicted_margin is not None and prediction.market_spread is not None else None,
             actual_margin=margin,
-            closing_spread=prediction.market_spread,
+            closing_spread=None,
         ))
     session.commit()
     return len(rows)
