@@ -34,6 +34,7 @@ Open `http://127.0.0.1:8000/health`; it returns `{"status":"healthy"}`.
 
 ## Current phase
 
-Phase 3 generates historical pregame features. Team statistics use only earlier
-completed games, while Weeks 1–7 blend the immediately preceding season with
-the available current-season sample using documented starting weights.
+Phase 4 trains the first models using fixed chronological splits: 2015–2022 for
+training, 2023–2024 for validation, and an untouched 2025 final test. The
+current versions are `logistic_v1` for moneyline probability and
+`spread_ridge_v1` for expected home margin.

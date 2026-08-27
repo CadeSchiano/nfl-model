@@ -15,8 +15,7 @@ venv/
 # Generated data and model artifacts
 data/raw/
 data/processed/
-backend/app/ml/models/*.joblib
-backend/app/ml/models/*.pkl
+backend/app/ml/models/*
 
 # Frontend
 frontend/node_modules/
