@@ -32,6 +32,8 @@ uvicorn app.main:app --reload
 
 Open `http://127.0.0.1:8000/health`; it returns `{"status":"healthy"}`.
 
+Run the test suite from `backend/` with `pytest tests -q`.
+
 ## Current phase
 
 Phase 5 imports live NFL moneyline and spread snapshots from The Odds API.
