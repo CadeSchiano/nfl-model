@@ -13,7 +13,7 @@ def raw_games() -> pd.DataFrame:
             "home_team": ["NYJ", "SF"], "away_team": ["BUF", "ARI"],
             "home_score": [17, 20], "away_score": [27, 24], "spread_line": [-6.5, 3.0],
             "home_moneyline": [250, 130], "away_moneyline": [-300, -150],
-            "home_rest": [7, 7], "away_rest": [7, 7],
+            "home_rest": [7, 7], "away_rest": [7, 7], "div_game": [False, True],
         }
     )
 
@@ -25,6 +25,7 @@ def test_build_historical_games_adds_labels_and_orders_games() -> None:
     assert list(games["home_win"]) == [0, 0]
     assert list(games["margin"]) == [-4, -10]
     assert list(games["rest"]) == [0, 0]
+    assert list(games["division_game"]) == [True, False]
     assert report.warnings == ()
 
 

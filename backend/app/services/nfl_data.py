@@ -7,16 +7,18 @@ team statistics, so no future game can enter a future feature by accident.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Iterable
 
 import pandas as pd
+import numpy as np
 import requests
 
 
 NFLVERSE_GAMES_URL = (
     "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
 )
+NFLVERSE_PBP_URL = "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{season}.parquet"
 DEFAULT_SEASONS = tuple(range(2015, 2026))
 VALID_TEAM_CODES = frozenset(
     {
@@ -58,7 +60,7 @@ def build_historical_games(
     required_columns = {
         "game_id", "season", "week", "game_type", "gameday", "gametime",
         "home_team", "away_team", "home_score", "away_score", "spread_line",
-        "home_moneyline", "away_moneyline", "home_rest", "away_rest",
+        "home_moneyline", "away_moneyline", "home_rest", "away_rest", "div_game",
     }
     missing = sorted(required_columns.difference(raw_games.columns))
     if missing:
@@ -89,6 +91,7 @@ def build_historical_games(
     games["away_moneyline"] = pd.to_numeric(games["away_moneyline"], errors="coerce")
     games["home_rest"] = pd.to_numeric(games["home_rest"], errors="coerce")
     games["away_rest"] = pd.to_numeric(games["away_rest"], errors="coerce")
+    games["division_game"] = games["div_game"].fillna(False).astype(bool)
 
     _validate_required_game_values(games, requested_seasons)
     _validate_teams(games)
@@ -115,7 +118,7 @@ def build_historical_games(
     columns = [
         "game_id", "season", "week", "date", "home", "away", "home_score", "away_score",
         "spread", "home_moneyline", "away_moneyline", "home_rest", "away_rest", "rest",
-        "home_win", "margin",
+        "division_game", "home_win", "margin",
     ]
     return games.loc[:, columns], ValidationReport(tuple(warnings))
 
@@ -163,3 +166,72 @@ def _quality_warnings(games: pd.DataFrame) -> list[str]:
     if invalid_moneylines:
         warnings.append(f"moneyline: {int(invalid_moneylines)} zero values retained for review")
     return warnings
+
+
+def download_team_game_stats(seasons: Iterable[int] = DEFAULT_SEASONS) -> pd.DataFrame:
+    """Aggregate nflverse play-by-play into the Phase 3 team-game statistics.
+
+    Files are read one season at a time and only the required columns are
+    loaded. Raw play data is not retained, keeping generated data local and
+    reproducible without committing a large source dataset.
+    """
+    columns = [
+        "game_id", "season_type", "posteam", "pass", "rush", "yards_gained",
+        "interception", "fumble_lost",
+    ]
+    team_games = []
+    for season in seasons:
+        response = requests.get(NFLVERSE_PBP_URL.format(season=season), timeout=120)
+        response.raise_for_status()
+        plays = pd.read_parquet(BytesIO(response.content), columns=columns)
+        team_games.append(aggregate_team_game_stats(plays))
+    return pd.concat(team_games, ignore_index=True)
+
+
+def aggregate_team_game_stats(plays: pd.DataFrame) -> pd.DataFrame:
+    """Calculate offensive efficiency and turnovers for each team-game.
+
+    A play is an offensive pass or rush attempt. Special-teams plays are
+    intentionally excluded from yards-per-play measures.
+    """
+    required = {
+        "game_id", "season_type", "posteam", "pass", "rush", "yards_gained",
+        "interception", "fumble_lost",
+    }
+    missing = sorted(required.difference(plays.columns))
+    if missing:
+        raise DataValidationError(f"play data is missing required columns: {missing}")
+    offense = plays.loc[
+        plays["season_type"].eq("REG")
+        & plays["posteam"].notna()
+        & (plays["pass"].fillna(0).eq(1) | plays["rush"].fillna(0).eq(1))
+    ].copy()
+    if offense.empty:
+        raise DataValidationError("no regular-season offensive plays found")
+    for column in ("yards_gained", "pass", "rush", "interception", "fumble_lost"):
+        offense[column] = pd.to_numeric(offense[column], errors="coerce").fillna(0)
+
+    group_columns = ["game_id", "posteam"]
+    total = offense.groupby(group_columns, as_index=False).agg(
+        offensive_plays=("yards_gained", "size"),
+        offensive_yards=("yards_gained", "sum"),
+        interceptions=("interception", "sum"),
+        fumbles_lost=("fumble_lost", "sum"),
+    )
+    passing = offense.loc[offense["pass"].eq(1)].groupby(group_columns, as_index=False).agg(
+        pass_plays=("yards_gained", "size"), pass_yards=("yards_gained", "sum")
+    )
+    rushing = offense.loc[offense["rush"].eq(1)].groupby(group_columns, as_index=False).agg(
+        rush_plays=("yards_gained", "size"), rush_yards=("yards_gained", "sum")
+    )
+    stats = total.merge(passing, how="left", on=group_columns).merge(rushing, how="left", on=group_columns)
+    stats[["pass_plays", "pass_yards", "rush_plays", "rush_yards"]] = stats[
+        ["pass_plays", "pass_yards", "rush_plays", "rush_yards"]
+    ].fillna(0)
+    stats["ypp"] = stats["offensive_yards"] / stats["offensive_plays"]
+    stats["pass_ypp"] = stats["pass_yards"] / stats["pass_plays"].replace(0, np.nan)
+    stats["rush_ypp"] = stats["rush_yards"] / stats["rush_plays"].replace(0, np.nan)
+    stats["turnovers"] = stats["interceptions"] + stats["fumbles_lost"]
+    return stats.rename(columns={"posteam": "team"})[
+        ["game_id", "team", "ypp", "pass_ypp", "rush_ypp", "turnovers"]
+    ]

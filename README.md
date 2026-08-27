@@ -34,6 +34,6 @@ Open `http://127.0.0.1:8000/health`; it returns `{"status":"healthy"}`.
 
 ## Current phase
 
-Phase 2 implements the chronological Elo baseline. Each historical prediction
-records pregame ratings before the result updates either team, preventing
-future-game leakage.
+Phase 3 generates historical pregame features. Team statistics use only earlier
+completed games, while Weeks 1–7 blend the immediately preceding season with
+the available current-season sample using documented starting weights.

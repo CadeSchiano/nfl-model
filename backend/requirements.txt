@@ -8,3 +8,4 @@ pytest
 joblib
 requests
 httpx2
+pyarrow
