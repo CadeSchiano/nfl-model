@@ -15,6 +15,7 @@ venv/
 # Generated data and model artifacts
 data/raw/
 data/processed/
+data/processed/odds_snapshots.jsonl
 backend/app/ml/models/*
 
 # Frontend
