@@ -36,5 +36,6 @@ Run the test suite from `backend/` with `pytest tests -q`.
 
 ## Current phase
 
-Phase 6 provides SQLite development tables and public FastAPI routes for games,
-predictions, odds, and performance. Prediction creation is locked after kickoff.
+Phase 7 automatically grades completed predictions as wins, losses, or pushes.
+Performance endpoints report recorded results; ROI will use the immutable odds
+snapshot attached to each future live prediction.
