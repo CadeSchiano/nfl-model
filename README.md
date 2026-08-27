@@ -34,5 +34,6 @@ Open `http://127.0.0.1:8000/health`; it returns `{"status":"healthy"}`.
 
 ## Current phase
 
-Phase 0 foundation is in place. Phase 1 creates a reproducible 2015–2025
-regular-season historical dataset from nflverse, with explicit validation.
+Phase 2 implements the chronological Elo baseline. Each historical prediction
+records pregame ratings before the result updates either team, preventing
+future-game leakage.
