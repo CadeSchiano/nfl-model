@@ -26,16 +26,17 @@ def generate_current_week_predictions(session: Session) -> int:
     if game is None:
         return 0
     games = session.scalars(select(Game).where(Game.season == game.season, Game.week == game.week)).all()
+    games = [game for game in games if session.scalar(select(Prediction.id).where(Prediction.game_id == game.id, Prediction.model_version == "logistic_v1")) is None]
+    if not games:
+        return 0
     features = _week_one_features(games)
     models = ROOT / "backend" / "app" / "ml" / "models"
     moneyline, spread = joblib.load(models / "logistic_v1.joblib"), joblib.load(models / "spread_ridge_v1.joblib")
     probabilities, margins = predict_home_win_probability(moneyline, features), predict_home_margin(spread, features)
     added = 0
     for game, probability, margin in zip(games, probabilities, margins):
-        exists = session.scalar(select(Prediction).where(Prediction.game_id == game.id, Prediction.model_version == "logistic_v1"))
-        if exists is None:
-            session.add(Prediction(game_id=game.id, model_version="logistic_v1", timestamp=datetime.now(timezone.utc), home_win_probability=float(probability), away_win_probability=float(1 - probability), predicted_margin=float(margin)))
-            added += 1
+        session.add(Prediction(game_id=game.id, model_version="logistic_v1", timestamp=datetime.now(timezone.utc), home_win_probability=float(probability), away_win_probability=float(1 - probability), predicted_margin=float(margin)))
+        added += 1
     session.commit()
     return added
 
