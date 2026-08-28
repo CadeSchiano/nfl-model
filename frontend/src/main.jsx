@@ -6,6 +6,17 @@ import './styles.css'
 const nav = [['/', 'Dashboard'], ['/predictions', 'Predictions'], ['/performance', 'Performance'], ['/history', 'History'], ['/methodology', 'Methodology']]
 const pct = value => value == null ? '—' : `${(value * 100).toFixed(1)}%`
 const margin = value => value == null ? '—' : `${value > 0 ? '+' : ''}${Number(value).toFixed(1)}`
+const teamLine = (value, game, market = false) => {
+  if (value == null || !game) return '—'
+  const homeMargin = market ? -value : value
+  const team = homeMargin >= 0 ? game.home_team : game.away_team
+  return `${team} -${Math.abs(homeMargin).toFixed(1)}`
+}
+const disagreement = (value, game) => {
+  if (value == null || !game) return '—'
+  const team = value >= 0 ? game.home_team : game.away_team
+  return `${Math.abs(value).toFixed(1)} pts → ${team}`
+}
 
 function useData(path) {
   const [state, setState] = useState({ loading: true, data: null, error: null })
@@ -19,7 +30,7 @@ function Loading() { return <Empty>Loading model data…</Empty> }
 function PredictionTable({ predictions, games = [] }) {
   if (!predictions.length) return <Empty>No published predictions yet.</Empty>
   const gameById = Object.fromEntries(games.map(game => [game.id, game]))
-  return <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Model win %</th><th>Market win %</th><th>Difference</th><th>Model spread</th><th>Market spread</th><th>Spread difference</th></tr></thead><tbody>{predictions.map(prediction => { const game = gameById[prediction.game_id]; return <tr key={prediction.id}><td>{game ? <a href={`/games/${game.id}`}>{game.away_team} @ {game.home_team}</a> : prediction.game_id}</td><td>{pct(prediction.home_win_probability)}</td><td>{pct(prediction.market_home_probability)}</td><td className="accent">{pct(prediction.moneyline_difference)}</td><td>{margin(prediction.predicted_margin)}</td><td>{prediction.market_spread ?? '—'}</td><td className="accent">{margin(prediction.spread_difference)}</td></tr> })}</tbody></table></div>
+  return <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Model win %</th><th>Market win %</th><th>Difference</th><th>Model line</th><th>Market line</th><th>Model disagreement</th></tr></thead><tbody>{predictions.map(prediction => { const game = gameById[prediction.game_id]; return <tr key={prediction.id}><td>{game ? <a href={`/games/${game.id}`}>{game.away_team} @ {game.home_team}</a> : prediction.game_id}</td><td>{pct(prediction.home_win_probability)}</td><td>{pct(prediction.market_home_probability)}</td><td className="accent">{pct(prediction.moneyline_difference)}</td><td>{teamLine(prediction.predicted_margin, game)}</td><td>{teamLine(prediction.market_spread, game, true)}</td><td className="accent">{disagreement(prediction.spread_difference, game)}</td></tr> })}</tbody></table></div>
 }
 
 function Dashboard() { const games = useData('/games/current-week'); const predictions = useData('/predictions/current-week'); if (games.loading || predictions.loading) return <Loading />; if (games.error || predictions.error) return <Empty>Backend unavailable. Start FastAPI on port 8000.</Empty>; return <><section className="hero"><p className="eyebrow">NFL QUANTITATIVE GAME MODEL</p><h1>Current-week projections</h1><p>Pregame model probabilities and market comparison. Results are analytical projections, not guarantees.</p></section><div className="stat-grid"><div><b>{games.data.length}</b><span>Upcoming games</span></div><div><b>{predictions.data.length}</b><span>Published projections</span></div><div><b>V0.1</b><span>Model release</span></div></div><PredictionTable predictions={predictions.data} games={games.data} /></> }
