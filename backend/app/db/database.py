@@ -47,3 +47,11 @@ def initialize_database() -> None:
     if "odds_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE predictions ADD COLUMN odds_id INTEGER"))
+    game_columns = {column["name"] for column in inspect(engine).get_columns("games")}
+    with engine.begin() as connection:
+        if "home_rest" not in game_columns:
+            connection.execute(text("ALTER TABLE games ADD COLUMN home_rest INTEGER"))
+        if "away_rest" not in game_columns:
+            connection.execute(text("ALTER TABLE games ADD COLUMN away_rest INTEGER"))
+        if "division_game" not in game_columns:
+            connection.execute(text("ALTER TABLE games ADD COLUMN division_game BOOLEAN DEFAULT 0"))
