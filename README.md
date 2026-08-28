@@ -36,6 +36,6 @@ Run the test suite from `backend/` with `pytest tests -q`.
 
 ## Current phase
 
-Phase 7 automatically grades completed predictions as wins, losses, or pushes.
-Performance endpoints report recorded results; ROI will use the immutable odds
-snapshot attached to each future live prediction.
+Phase 8 provides the React/Vite analytics interface for dashboard projections,
+prediction history, game detail, performance, and methodology. It connects to
+the local FastAPI API without accounts or betting-tout features.
