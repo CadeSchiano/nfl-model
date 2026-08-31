@@ -24,7 +24,7 @@ def update_completed_games(session: Session, start: date | None = None, end: dat
         for game in day.get("games", []):
             if game.get("status", {}).get("abstractGameState") != "Final":
                 continue
-            ingest_completed_game(session, _get_live_feed(int(game["gamePk"])))
+            ingest_completed_game(session, get_live_feed(int(game["gamePk"])))
             imported += 1
     session.commit()
     return imported
@@ -78,7 +78,7 @@ def _get(path: str, params: dict | None = None) -> dict:
     return response.json()
 
 
-def _get_live_feed(game_pk: int) -> dict:
+def get_live_feed(game_pk: int) -> dict:
     """The schedule API is v1; detailed live feeds are served on v1.1."""
     response = requests.get(f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=45)
     response.raise_for_status()

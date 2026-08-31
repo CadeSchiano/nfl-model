@@ -19,6 +19,8 @@ class MlbGame(Base):
     home_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     away_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(24), index=True)
+    probable_home_pitcher: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    probable_away_pitcher: Mapped[str | None] = mapped_column(String(120), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -69,6 +71,8 @@ class MlbHrPrediction(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     game_id: Mapped[int] = mapped_column(ForeignKey("mlb_games.id"), index=True)
     player_id: Mapped[int] = mapped_column(Integer, index=True)
+    player_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    team: Mapped[str | None] = mapped_column(String(80), nullable=True)
     model_version: Mapped[str] = mapped_column(String(80))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     first_pitch: Mapped[datetime] = mapped_column(DateTime(timezone=True))
