@@ -40,7 +40,7 @@ def get_db() -> Generator[Session, None, None]:
 
 def initialize_database() -> None:
     """Create the V0.1 tables when they do not yet exist."""
-    from app.models import game, odds, prediction  # noqa: F401
+    from app.models import game, mlb, odds, prediction  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     columns = {column["name"] for column in inspect(engine).get_columns("predictions")}
