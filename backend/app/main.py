@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import games, odds, performance, predictions
+from app.api import games, mlb, odds, performance, predictions
 from app.db.database import initialize_database
 
 
@@ -23,6 +23,7 @@ app.include_router(games.router)
 app.include_router(predictions.router)
 app.include_router(performance.router)
 app.include_router(odds.router)
+app.include_router(mlb.router)
 
 
 @app.get("/health")
