@@ -1,14 +1,87 @@
 """Read-only operational status for the isolated MLB workflow."""
 
-from fastapi import APIRouter, Depends
+from datetime import datetime, timezone
+from pathlib import Path
+
+import joblib
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.mlb import MlbBatterFeature, MlbGame, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
+from app.services.mlb_prediction_service import _pregame_batter_features
 
 
 router = APIRouter(prefix="/mlb", tags=["mlb"])
+
+
+@router.get("/batters")
+def search_batters(query: str = Query(min_length=2), db: Session = Depends(get_db)):
+    """Search batters from the local completed-game history for the player picker."""
+    rows = db.execute(
+        select(MlbPlayerGame, MlbGame.game_date)
+        .join(MlbGame, MlbGame.id == MlbPlayerGame.game_id)
+        .where(MlbGame.status == "final", MlbPlayerGame.plate_appearances.is_not(None), MlbPlayerGame.player_name.ilike(f"%{query}%"))
+        .order_by(MlbGame.game_date.desc())
+    ).all()
+    results, seen = [], set()
+    for player_game, _ in rows:
+        if player_game.player_id in seen:
+            continue
+        seen.add(player_game.player_id)
+        results.append({"player_id": player_game.player_id, "player_name": player_game.player_name, "team": player_game.team})
+        if len(results) == 12:
+            break
+    return results
+
+
+@router.get("/batters/{player_id}/projection")
+def batter_projection(player_id: int, db: Session = Depends(get_db)):
+    """Calculate a non-persisted projection for a searched batter's next game.
+
+    It becomes an official prediction only when the lineup-gated publishing
+    script records it before first pitch.
+    """
+    now = datetime.now(timezone.utc)
+    latest_player_game = db.execute(
+        select(MlbPlayerGame, MlbGame.game_date)
+        .join(MlbGame, MlbGame.id == MlbPlayerGame.game_id)
+        .where(MlbPlayerGame.player_id == player_id, MlbGame.status == "final")
+        .order_by(MlbGame.game_date.desc())
+    ).first()
+    if latest_player_game is None:
+        raise HTTPException(status_code=404, detail="batter not found")
+    player_game, _ = latest_player_game
+    game = db.scalar(
+        select(MlbGame)
+        .where(
+            MlbGame.status == "scheduled",
+            MlbGame.game_date > now,
+            (MlbGame.home_team == player_game.team) | (MlbGame.away_team == player_game.team),
+        )
+        .order_by(MlbGame.game_date)
+    )
+    if game is None:
+        return {"available": False, "player_name": player_game.player_name, "team": player_game.team, "message": "No upcoming scheduled game was found for this batter."}
+    model_version = db.scalar(select(MlbModelVersion).order_by(MlbModelVersion.trained_at.desc()))
+    if model_version is None or not Path(model_version.artifact_path).exists():
+        return {"available": False, "player_name": player_game.player_name, "team": player_game.team, "message": "No local MLB model artifact is available yet."}
+    features = _pregame_batter_features(db, player_id, game.game_date)
+    if features["prior_games"] == 0:
+        return {"available": False, "player_name": player_game.player_name, "team": player_game.team, "message": "This batter has no completed-game history for a projection yet."}
+    artifact = joblib.load(model_version.artifact_path)
+    probability = float(artifact["model"].predict_proba(pd.DataFrame([features])[artifact["features"]])[:, 1][0])
+    return {
+        "available": True,
+        "official": False,
+        "player_name": player_game.player_name,
+        "team": player_game.team,
+        "probability": probability,
+        "game": {"id": game.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date},
+        "model_version": model_version.version,
+    }
 
 
 @router.get("/status")
