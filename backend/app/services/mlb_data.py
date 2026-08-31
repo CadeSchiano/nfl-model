@@ -25,8 +25,9 @@ def update_completed_games(session: Session, start: date | None = None, end: dat
             if game.get("status", {}).get("abstractGameState") != "Final":
                 continue
             ingest_completed_game(session, get_live_feed(int(game["gamePk"])))
+            # Persist each game so a long historical backfill can safely resume.
+            session.commit()
             imported += 1
-    session.commit()
     return imported
 
 
