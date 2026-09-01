@@ -12,9 +12,28 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.mlb import MlbBatterFeature, MlbGame, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
 from app.services.mlb_prediction_service import _pregame_batter_features
+from app.services.mlb_performance_service import hr_performance
 
 
 router = APIRouter(prefix="/mlb", tags=["mlb"])
+
+
+@router.get("/top-10")
+def daily_top_10(db: Session = Depends(get_db)):
+    """Today's ten highest official, confirmed-lineup HR probabilities."""
+    predictions = db.execute(
+        select(MlbHrPrediction, MlbGame)
+        .join(MlbGame, MlbGame.id == MlbHrPrediction.game_id)
+        .where(MlbGame.status == "scheduled")
+        .order_by(MlbHrPrediction.probability.desc(), MlbHrPrediction.timestamp)
+        .limit(10)
+    ).all()
+    return [{"player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "model_version": prediction.model_version, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date} for prediction, game in predictions]
+
+
+@router.get("/performance")
+def mlb_performance(db: Session = Depends(get_db)):
+    return hr_performance(db)
 
 
 @router.get("/batters")
