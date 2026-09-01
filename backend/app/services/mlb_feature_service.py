@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.models.mlb import MlbBatterFeature, MlbGame, MlbPlayerGame
 
 
-ROLLING_WINDOW = 30
+# Selected by chronological backtest: best log loss among 15/25/30/40/60.
+ROLLING_WINDOW = 60
 
 
 def refresh_batter_features(session: Session) -> int:

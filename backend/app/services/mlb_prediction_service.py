@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.mlb import MlbGame, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
 from app.services.mlb_data import _dt, _get, get_live_feed
+from app.services.mlb_feature_service import ROLLING_WINDOW
 
 
 def update_schedule(session: Session, game_date: date | None = None) -> int:
@@ -115,7 +116,7 @@ def _pregame_batter_features(session: Session, player_id: int, first_pitch: date
         .join(MlbGame, MlbGame.id == MlbPlayerGame.game_id)
         .where(MlbPlayerGame.player_id == player_id, MlbPlayerGame.plate_appearances.is_not(None), MlbGame.status == "final", MlbGame.game_date < first_pitch)
         .order_by(MlbGame.game_date.desc())
-        .limit(30)
+        .limit(ROLLING_WINDOW)
     ).all()
     prior_games = len(rows)
     prior_pa = sum(pa or 0 for _, pa in rows)
