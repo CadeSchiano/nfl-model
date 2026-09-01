@@ -66,6 +66,26 @@ class MlbModelVersion(Base):
     artifact_path: Mapped[str] = mapped_column(String(255))
 
 
+class MlbGameModelVersion(Base):
+    __tablename__ = "mlb_game_model_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[str] = mapped_column(String(80), unique=True)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    training_data_through: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    artifact_path: Mapped[str] = mapped_column(String(255))
+
+
+class MlbGamePrediction(Base):
+    __tablename__ = "mlb_game_predictions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("mlb_games.id"), unique=True, index=True)
+    model_version: Mapped[str] = mapped_column(String(80))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    home_win_probability: Mapped[float] = mapped_column(Float)
+    away_win_probability: Mapped[float] = mapped_column(Float)
+    predicted_home_margin: Mapped[float] = mapped_column(Float)
+
+
 class MlbHrPrediction(Base):
     __tablename__ = "mlb_hr_predictions"
     id: Mapped[int] = mapped_column(primary_key=True)

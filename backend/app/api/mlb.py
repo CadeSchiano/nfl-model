@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.mlb import MlbBatterFeature, MlbGame, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
+from app.models.mlb import MlbBatterFeature, MlbGame, MlbGamePrediction, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
 from app.services.mlb_prediction_service import _pregame_batter_features
 from app.services.mlb_performance_service import hr_performance
 
@@ -29,6 +29,12 @@ def daily_top_10(db: Session = Depends(get_db)):
         .limit(10)
     ).all()
     return [{"player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "model_version": prediction.model_version, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date} for prediction, game in predictions]
+
+
+@router.get("/game-predictions")
+def game_predictions(db: Session = Depends(get_db)):
+    rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).order_by(MlbGame.game_date)).all()
+    return [{"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "away_win_probability": prediction.away_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "model_version": prediction.model_version} for prediction, game in rows]
 
 
 @router.get("/performance")
