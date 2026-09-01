@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -25,7 +26,16 @@ def grade_game_predictions(session: Session) -> int:
 def game_performance(session: Session) -> dict:
     rows = session.execute(select(MlbGamePrediction, MlbGamePredictionResult).join(MlbGamePredictionResult, MlbGamePredictionResult.prediction_id == MlbGamePrediction.id)).all()
     if not rows:
-        return {"games": 0, "accuracy": None, "brier_score": None, "margin_mae": None, "margin_rmse": None}
+        return {"games": 0, "accuracy": None, "brier_score": None, "margin_mae": None, "margin_rmse": None, "by_model_version": [], "daily": []}
+    by_version: dict[str, list[tuple[MlbGamePrediction, MlbGamePredictionResult]]] = defaultdict(list)
+    for prediction, result in rows:
+        by_version[prediction.model_version].append((prediction, result))
+    overall = _game_metrics(rows)
+    overall["by_model_version"] = [{"model_version": version, **_game_metrics(items)} for version, items in sorted(by_version.items())]
+    return overall
+
+
+def _game_metrics(rows: list[tuple[MlbGamePrediction, MlbGamePredictionResult]]) -> dict:
     outcomes = [int(result.actual_home_margin > 0) for _, result in rows]
     probabilities = [prediction.home_win_probability for prediction, _ in rows]
     errors = [prediction.predicted_home_margin - result.actual_home_margin for prediction, result in rows]
