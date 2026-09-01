@@ -15,7 +15,8 @@ MLB_API = "https://statsapi.mlb.com/api/v1"
 
 def update_completed_games(session: Session, start: date | None = None, end: date | None = None) -> int:
     """Fetch and persist final regular-season MLB games without duplicate rows."""
-    latest = session.scalar(select(func.max(MlbGame.official_date)))
+    # Future scheduled games must never advance the completed-results cursor.
+    latest = session.scalar(select(func.max(MlbGame.official_date)).where(MlbGame.status == "final"))
     start = start or ((latest + timedelta(days=1)) if latest else date.today() - timedelta(days=1))
     end = end or date.today()
     schedule = _get("schedule", {"sportId": 1, "gameType": "R", "startDate": start.isoformat(), "endDate": end.isoformat()})
