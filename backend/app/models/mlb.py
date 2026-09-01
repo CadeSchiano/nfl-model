@@ -90,6 +90,14 @@ class MlbGamePrediction(Base):
     spread_difference: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class MlbGamePredictionResult(Base):
+    __tablename__ = "mlb_game_prediction_results"
+    prediction_id: Mapped[int] = mapped_column(ForeignKey("mlb_game_predictions.id"), primary_key=True)
+    winner_result: Mapped[str] = mapped_column(String(8))
+    actual_home_margin: Mapped[float] = mapped_column(Float)
+    graded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class MlbGameOdds(Base):
     __tablename__ = "mlb_game_odds"
     id: Mapped[int] = mapped_column(primary_key=True)
