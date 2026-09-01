@@ -84,6 +84,21 @@ class MlbGamePrediction(Base):
     home_win_probability: Mapped[float] = mapped_column(Float)
     away_win_probability: Mapped[float] = mapped_column(Float)
     predicted_home_margin: Mapped[float] = mapped_column(Float)
+    market_home_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_spread: Mapped[float | None] = mapped_column(Float, nullable=True)
+    moneyline_difference: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spread_difference: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class MlbGameOdds(Base):
+    __tablename__ = "mlb_game_odds"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("mlb_games.id"), index=True)
+    bookmaker: Mapped[str] = mapped_column(String(64))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    home_moneyline: Mapped[int] = mapped_column(Integer)
+    away_moneyline: Mapped[int] = mapped_column(Integer)
+    home_spread: Mapped[float] = mapped_column(Float)
 
 
 class MlbHrPrediction(Base):

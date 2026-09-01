@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.mlb import MlbGame, MlbGameModelVersion, MlbGamePrediction
+from app.services.mlb_odds_service import latest_market
 
 
 GAME_FEATURES = ["home_win_rate", "away_win_rate", "home_avg_margin", "away_avg_margin"]
@@ -59,7 +60,8 @@ def publish_game_predictions(session: Session, now: datetime | None = None) -> i
         input_frame = pd.DataFrame([features])[payload["features"]]
         home_probability = float(payload["win_model"].predict_proba(input_frame)[:, 1][0])
         margin = float(payload["margin_model"].predict(input_frame)[0])
-        session.add(MlbGamePrediction(game_id=game.id, model_version=version.version, timestamp=now, home_win_probability=home_probability, away_win_probability=1 - home_probability, predicted_home_margin=margin))
+        market = latest_market(session, game.id)
+        session.add(MlbGamePrediction(game_id=game.id, model_version=version.version, timestamp=now, home_win_probability=home_probability, away_win_probability=1 - home_probability, predicted_home_margin=margin, market_home_probability=market["market_home_probability"] if market else None, market_spread=market["market_spread"] if market else None, moneyline_difference=home_probability - market["market_home_probability"] if market else None, spread_difference=margin - (-market["market_spread"]) if market else None))
         created += 1
     session.commit()
     return created

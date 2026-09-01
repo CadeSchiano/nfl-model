@@ -34,7 +34,7 @@ def daily_top_10(db: Session = Depends(get_db)):
 @router.get("/game-predictions")
 def game_predictions(db: Session = Depends(get_db)):
     rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).order_by(MlbGame.game_date)).all()
-    return [{"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "away_win_probability": prediction.away_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "model_version": prediction.model_version} for prediction, game in rows]
+    return [{"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "away_win_probability": prediction.away_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "market_home_probability": prediction.market_home_probability, "market_spread": prediction.market_spread, "moneyline_difference": prediction.moneyline_difference, "spread_difference": prediction.spread_difference, "model_version": prediction.model_version} for prediction, game in rows]
 
 
 @router.get("/performance")
