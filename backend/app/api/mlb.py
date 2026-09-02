@@ -22,10 +22,11 @@ router = APIRouter(prefix="/mlb", tags=["mlb"])
 @router.get("/top-10")
 def daily_top_10(db: Session = Depends(get_db)):
     """Today's ten highest official, confirmed-lineup HR probabilities."""
+    now = datetime.now(timezone.utc)
     predictions = db.execute(
         select(MlbHrPrediction, MlbGame)
         .join(MlbGame, MlbGame.id == MlbHrPrediction.game_id)
-        .where(MlbGame.status == "scheduled")
+        .where(MlbGame.status == "scheduled", MlbGame.game_date > now)
         .order_by(MlbHrPrediction.probability.desc(), MlbHrPrediction.timestamp)
         .limit(10)
     ).all()
@@ -34,13 +35,23 @@ def daily_top_10(db: Session = Depends(get_db)):
 
 @router.get("/game-predictions")
 def game_predictions(db: Session = Depends(get_db)):
-    rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).order_by(MlbGame.game_date)).all()
+    now = datetime.now(timezone.utc)
+    rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).where(MlbGame.game_date > now).order_by(MlbGame.game_date)).all()
     return [{"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "away_win_probability": prediction.away_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "market_home_probability": prediction.market_home_probability, "market_spread": prediction.market_spread, "moneyline_difference": prediction.moneyline_difference, "spread_difference": prediction.spread_difference, "model_version": prediction.model_version} for prediction, game in rows]
 
 
 @router.get("/game-performance")
 def mlb_game_performance(db: Session = Depends(get_db)):
     return game_performance(db)
+
+
+@router.get("/history")
+def mlb_history(db: Session = Depends(get_db)):
+    """Completed and past-start-time MLB predictions, preserved for review."""
+    now = datetime.now(timezone.utc)
+    hr_rows = db.execute(select(MlbHrPrediction, MlbGame).join(MlbGame, MlbGame.id == MlbHrPrediction.game_id).where(MlbGame.game_date <= now).order_by(MlbGame.game_date.desc(), MlbHrPrediction.probability.desc()).limit(250)).all()
+    game_rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).where(MlbGame.game_date <= now).order_by(MlbGame.game_date.desc()).limit(100)).all()
+    return {"hr_predictions": [{"id": prediction.id, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "result": prediction.result, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date, "model_version": prediction.model_version} for prediction, game in hr_rows], "game_predictions": [{"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "model_version": prediction.model_version} for prediction, game in game_rows]}
 
 
 @router.get("/performance")
@@ -119,7 +130,7 @@ def batter_projection(player_id: int, db: Session = Depends(get_db)):
 def mlb_status(db: Session = Depends(get_db)):
     """Return MLB-only ingestion, model, and prediction state for the dashboard."""
     latest_game = db.scalar(select(MlbGame).where(MlbGame.status == "final").order_by(MlbGame.game_date.desc()))
-    scheduled_games = db.scalars(select(MlbGame).where(MlbGame.status == "scheduled").order_by(MlbGame.game_date)).all()
+    scheduled_games = db.scalars(select(MlbGame).where(MlbGame.status == "scheduled", MlbGame.game_date > datetime.now(timezone.utc)).order_by(MlbGame.game_date)).all()
     models = db.scalars(select(MlbModelVersion).order_by(MlbModelVersion.trained_at.desc())).all()
     predictions = db.scalars(
         select(MlbHrPrediction).order_by(MlbHrPrediction.timestamp.desc()).limit(50)
