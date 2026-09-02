@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.mlb import MlbBatterFeature, MlbGame, MlbGamePrediction, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
+from app.models.mlb import MlbBatterFeature, MlbGame, MlbGamePrediction, MlbGamePredictionResult, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
 from app.services.mlb_prediction_service import _pregame_batter_features
 from app.services.mlb_performance_service import hr_performance
 from app.services.mlb_game_grading_service import game_performance
@@ -50,8 +50,10 @@ def mlb_history(db: Session = Depends(get_db)):
     """Completed and past-start-time MLB predictions, preserved for review."""
     now = datetime.now(timezone.utc)
     hr_rows = db.execute(select(MlbHrPrediction, MlbGame).join(MlbGame, MlbGame.id == MlbHrPrediction.game_id).where(MlbGame.game_date <= now).order_by(MlbGame.game_date.desc(), MlbHrPrediction.probability.desc()).limit(250)).all()
-    game_rows = db.execute(select(MlbGamePrediction, MlbGame).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).where(MlbGame.game_date <= now).order_by(MlbGame.game_date.desc()).limit(100)).all()
-    return {"hr_predictions": [{"id": prediction.id, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "result": prediction.result, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date, "model_version": prediction.model_version} for prediction, game in hr_rows], "game_predictions": [{"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "model_version": prediction.model_version} for prediction, game in game_rows]}
+    game_rows = db.execute(select(MlbGamePrediction, MlbGame, MlbGamePredictionResult).join(MlbGame, MlbGame.id == MlbGamePrediction.game_id).outerjoin(MlbGamePredictionResult, MlbGamePredictionResult.prediction_id == MlbGamePrediction.id).where(MlbGame.game_date <= now).order_by(MlbGame.game_date.desc()).limit(100)).all()
+    games = [{"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "result": result.winner_result if result else None, "model_version": prediction.model_version} for prediction, game, result in game_rows]
+    hr = [{"id": prediction.id, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "result": prediction.result, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date, "model_version": prediction.model_version} for prediction, game in hr_rows]
+    return {"hr_predictions": hr, "game_predictions": games, "game_record": {"wins": sum(item["result"] == "WIN" for item in games), "losses": sum(item["result"] == "LOSS" for item in games)}, "hr_record": {"hits": sum(item["result"] == "HIT" for item in hr), "misses": sum(item["result"] == "MISS" for item in hr)}}
 
 
 @router.get("/performance")
