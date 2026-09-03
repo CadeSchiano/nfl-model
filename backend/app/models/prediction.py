@@ -33,3 +33,17 @@ class Result(Base):
     spread_result: Mapped[str | None] = mapped_column(String(8), nullable=True)
     actual_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     closing_spread: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class TouchdownPrediction(Base):
+    __tablename__ = "touchdown_predictions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[str] = mapped_column(ForeignKey("games.id"), index=True)
+    player_id: Mapped[str] = mapped_column(String(32), index=True)
+    player_name: Mapped[str] = mapped_column(String(120))
+    team: Mapped[str] = mapped_column(String(8))
+    model_version: Mapped[str] = mapped_column(String(64))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    probability: Mapped[float] = mapped_column(Float)
+    td_score: Mapped[int] = mapped_column(Integer)
+    result: Mapped[str | None] = mapped_column(String(8), nullable=True)
