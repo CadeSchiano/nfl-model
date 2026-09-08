@@ -47,6 +47,14 @@ def initialize_database() -> None:
     if "odds_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE predictions ADD COLUMN odds_id INTEGER"))
+    touchdown_columns = {column["name"] for column in inspect(engine).get_columns("touchdown_predictions")}
+    with engine.begin() as connection:
+        if "two_td_probability" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN two_td_probability FLOAT"))
+        if "two_td_call" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN two_td_call BOOLEAN DEFAULT 0"))
+        if "graded_at" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN graded_at DATETIME"))
     game_columns = {column["name"] for column in inspect(engine).get_columns("games")}
     with engine.begin() as connection:
         if "home_rest" not in game_columns:

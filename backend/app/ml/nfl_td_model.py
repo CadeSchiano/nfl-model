@@ -16,7 +16,7 @@ def build_td_features(players: pd.DataFrame, games: pd.DataFrame) -> pd.DataFram
     histories = defaultdict(lambda: deque(maxlen=5)); rows = []
     for row in data.itertuples(index=False):
         history = histories[row.player_id]
-        rows.append({"date": row.date, "player_id": row.player_id, "team": row.team, "scored_touchdown": row.scored_touchdown, "prior_games": len(history), "carries_avg": sum(x[0] for x in history) / len(history) if history else 0., "targets_avg": sum(x[1] for x in history) / len(history) if history else 0., "td_rate": sum(x[2] for x in history) / len(history) if history else 0.})
+        rows.append({"date": row.date, "player_id": row.player_id, "team": row.team, "scored_touchdown": row.scored_touchdown, "two_plus_touchdowns": int(getattr(row, "touchdowns", 0) >= 2), "prior_games": len(history), "carries_avg": sum(x[0] for x in history) / len(history) if history else 0., "targets_avg": sum(x[1] for x in history) / len(history) if history else 0., "td_rate": sum(x[2] for x in history) / len(history) if history else 0.})
         history.append((row.carries, row.targets, row.scored_touchdown))
     return pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
 
@@ -26,6 +26,8 @@ def train_td_model(features: pd.DataFrame, directory: Path) -> Path:
     if train.scored_touchdown.nunique() < 2: raise ValueError("TD training requires both outcomes")
     model = Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=1000, random_state=0))])
     model.fit(train[FEATURES], train.scored_touchdown)
+    two_td_model = Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=1000, random_state=0, class_weight="balanced"))])
+    two_td_model.fit(train[FEATURES], train.two_plus_touchdowns)
     directory.mkdir(parents=True, exist_ok=True); path = directory / "nfl_td_logistic_v1.joblib"
-    joblib.dump({"model": model, "features": FEATURES, "training_rows": len(train)}, path)
+    joblib.dump({"model": model, "two_td_model": two_td_model, "features": FEATURES, "training_rows": len(train)}, path)
     return path

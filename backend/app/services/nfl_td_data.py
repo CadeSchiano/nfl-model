@@ -19,6 +19,8 @@ def download_active_roster(season: int, week: int) -> pd.DataFrame:
     response.raise_for_status()
     roster = pd.read_csv(StringIO(response.text), low_memory=False)
     rows = roster.loc[(roster["week"] == week) & roster["game_type"].eq("REG") & roster["position"].isin(ELIGIBLE_POSITIONS) & roster["status"].eq("ACT")].copy()
+    # nflverse roster feeds use LA while the game table uses the established LAR code.
+    rows["team"] = rows["team"].replace({"LA": "LAR"})
     return rows[["team", "position", "full_name", "gsis_id", "week"]].dropna(subset=["gsis_id"])
 
 
