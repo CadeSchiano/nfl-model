@@ -2,6 +2,7 @@
 from __future__ import annotations
 from collections import defaultdict, deque
 from pathlib import Path
+from datetime import datetime, timezone
 import joblib
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -28,6 +29,8 @@ def train_td_model(features: pd.DataFrame, directory: Path) -> Path:
     model.fit(train[FEATURES], train.scored_touchdown)
     two_td_model = Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=1000, random_state=0, class_weight="balanced"))])
     two_td_model.fit(train[FEATURES], train.two_plus_touchdowns)
-    directory.mkdir(parents=True, exist_ok=True); path = directory / "nfl_td_logistic_v1.joblib"
-    joblib.dump({"model": model, "two_td_model": two_td_model, "features": FEATURES, "training_rows": len(train)}, path)
+    directory.mkdir(parents=True, exist_ok=True)
+    version = f"nfl_td_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    path = directory / f"{version}.joblib"
+    joblib.dump({"model": model, "two_td_model": two_td_model, "features": FEATURES, "training_rows": len(train), "model_version": version}, path)
     return path
