@@ -54,7 +54,8 @@ def mlb_history(db: Session = Depends(get_db)):
     games = [{"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "first_pitch": game.game_date, "home_win_probability": prediction.home_win_probability, "predicted_home_margin": prediction.predicted_home_margin, "result": result.winner_result if result else None, "model_version": prediction.model_version} for prediction, game, result in game_rows]
     hr = [{"id": prediction.id, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "result": prediction.result, "game": f"{game.away_team} @ {game.home_team}", "first_pitch": game.game_date, "model_version": prediction.model_version} for prediction, game in hr_rows]
     hit_probabilities = [item["probability"] for item in hr if item["result"] == "HIT"]
-    return {"hr_predictions": hr, "game_predictions": games, "game_record": {"wins": sum(item["result"] == "WIN" for item in games), "losses": sum(item["result"] == "LOSS" for item in games)}, "hr_record": {"hits": sum(item["result"] == "HIT" for item in hr), "misses": sum(item["result"] == "MISS" for item in hr), "average_hit_probability": sum(hit_probabilities) / len(hit_probabilities) if hit_probabilities else None}}
+    hits = [item for item in hr if item["result"] == "HIT"]
+    return {"hr_predictions": hits, "game_predictions": games, "game_record": {"wins": sum(item["result"] == "WIN" for item in games), "losses": sum(item["result"] == "LOSS" for item in games)}, "hr_record": {"hits": len(hits), "misses": sum(item["result"] == "MISS" for item in hr), "average_hit_probability": sum(hit_probabilities) / len(hit_probabilities) if hit_probabilities else None}}
 
 
 @router.get("/performance")
