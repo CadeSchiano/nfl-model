@@ -59,15 +59,19 @@ def publish_touchdown_predictions(session: Session) -> int:
     return added
 
 
-def grade_touchdown_predictions(session: Session) -> int:
+def grade_touchdown_predictions(session: Session, regrade: bool = False) -> int:
     """Grade immutable TD predictions for games whose final score is available."""
-    pending = session.execute(select(TouchdownPrediction, Game).join(Game).where(TouchdownPrediction.result.is_(None), Game.home_score.is_not(None), Game.away_score.is_not(None))).all()
+    statement = select(TouchdownPrediction, Game).join(Game).where(Game.home_score.is_not(None), Game.away_score.is_not(None))
+    if not regrade:
+        statement = statement.where(TouchdownPrediction.result.is_(None))
+    pending = session.execute(statement).all()
     if not pending:
         return 0
     game_ids = {game.id for _, game in pending}
     seasons = sorted({game.season for _, game in pending})
     completed = download_td_player_games(seasons)
-    scored = set(zip(completed.game_id.astype(str), completed.loc[completed.scored_touchdown.eq(1), "player_id"].astype(str)))
+    touchdown_rows = completed.loc[completed.scored_touchdown.eq(1), ["game_id", "player_id"]]
+    scored = set(zip(touchdown_rows.game_id.astype(str), touchdown_rows.player_id.astype(str)))
     graded = 0
     now = datetime.now(timezone.utc)
     for prediction, game in pending:
