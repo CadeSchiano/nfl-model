@@ -24,11 +24,15 @@ def main() -> None:
                 db.add(Team(abbreviation=code, name=code))
         for row in games.itertuples():
             game_id = str(row.game_id)
+            home_score = int(row.home_score) if pd.notna(row.home_score) else None
+            away_score = int(row.away_score) if pd.notna(row.away_score) else None
+            status = "completed" if home_score is not None and away_score is not None else "scheduled"
             existing = db.get(Game, game_id)
             if existing is None:
-                db.add(Game(id=game_id, season=season, week=int(row.week), date=row.date.to_pydatetime(), home_team=canonical_team_code(row.home_team), away_team=canonical_team_code(row.away_team), status="scheduled", home_rest=int(row.home_rest) if pd.notna(row.home_rest) else None, away_rest=int(row.away_rest) if pd.notna(row.away_rest) else None, division_game=bool(row.div_game)))
+                db.add(Game(id=game_id, season=season, week=int(row.week), date=row.date.to_pydatetime(), home_team=canonical_team_code(row.home_team), away_team=canonical_team_code(row.away_team), home_score=home_score, away_score=away_score, status=status, home_rest=int(row.home_rest) if pd.notna(row.home_rest) else None, away_rest=int(row.away_rest) if pd.notna(row.away_rest) else None, division_game=bool(row.div_game)))
             else:
                 existing.date, existing.home_rest, existing.away_rest, existing.division_game = row.date.to_pydatetime(), (int(row.home_rest) if pd.notna(row.home_rest) else None), (int(row.away_rest) if pd.notna(row.away_rest) else None), bool(row.div_game)
+                existing.home_score, existing.away_score, existing.status = home_score, away_score, status
         db.commit()
     print(f"Imported {len(games)} {season} regular-season games")
 
