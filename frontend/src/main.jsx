@@ -17,7 +17,14 @@ const disagreement = (value, game) => {
   const team = value >= 0 ? game.home_team : game.away_team
   return `${Math.abs(value).toFixed(1)} pts → ${team}`
 }
-const easternTime = value => value == null ? '—' : new Date(value).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' }) + ' ET'
+// SQLite returns timezone-naive ISO values even when the application stored UTC.
+// Treat an offset-free value as UTC before converting it for every sport's UI.
+const easternTime = value => {
+  if (value == null) return '—'
+  const text = String(value)
+  const utcValue = /(?:Z|[+-]\d\d:\d\d)$/.test(text) ? text : `${text}Z`
+  return new Date(utcValue).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' }) + ' ET'
+}
 
 function useData(path) {
   const [state, setState] = useState({ loading: true, data: null, error: null })
