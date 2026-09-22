@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.ml.nfl_td_model import FEATURES
 from app.models.game import Game
 from app.models.prediction import TouchdownPrediction
+from app.models.td_availability import NflTdAvailability
 from app.services.nfl_td_data import download_active_roster, download_td_player_games
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -43,25 +44,36 @@ def publish_touchdown_predictions(session: Session) -> int:
     candidates["td_score"] = (candidates.probability.rank(pct=True, method="average") * 100).round().clip(1, 100).astype(int)
     added = 0
     for game in games:
-        game_candidates = candidates.loc[candidates.team.isin([game.home_team, game.away_team])].sort_values("probability", ascending=False).head(3).copy()
+        _void_unavailable_predictions(session, game.id)
+        unavailable = set(session.scalars(select(NflTdAvailability.player_id).where(NflTdAvailability.game_id == game.id, NflTdAvailability.status == "OUT")).all())
+        game_candidates = candidates.loc[candidates.team.isin([game.home_team, game.away_team]) & ~candidates.player_id.isin(unavailable)].sort_values("probability", ascending=False).copy()
         if game_candidates.empty:
+            continue
+        active_ids = set(session.scalars(select(TouchdownPrediction.player_id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.publication_status == "ACTIVE")).all())
+        missing = max(0, 3 - len(active_ids))
+        if missing == 0:
             continue
         # A 2+ TD call is intentionally rare: at most one per game and only at 8%+.
         two_td_index = game_candidates.two_td_probability.idxmax()
         for index, player in game_candidates.iterrows():
-            # A prediction is locked once published; never replace it with a later model.
-            exists = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.player_id == player.player_id))
+            if str(player.player_id) in active_ids:
+                continue
+            # Do not resurrect a manually voided player in the same game.
+            exists = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.player_id == str(player.player_id)))
             if exists is not None:
                 continue
-            session.add(TouchdownPrediction(game_id=game.id, player_id=str(player.player_id), player_name=player.player_name, team=player.team, model_version=model_version, timestamp=now, probability=float(player.probability), td_score=int(player.td_score), two_td_probability=float(player.two_td_probability), two_td_call=bool(index == two_td_index and player.two_td_probability >= 0.08)))
+            session.add(TouchdownPrediction(game_id=game.id, player_id=str(player.player_id), player_name=player.player_name, team=player.team, model_version=model_version, timestamp=now, probability=float(player.probability), td_score=int(player.td_score), two_td_probability=float(player.two_td_probability), two_td_call=bool(index == two_td_index and player.two_td_probability >= 0.08), publication_status="ACTIVE"))
             added += 1
+            missing -= 1
+            if missing == 0:
+                break
     session.commit()
     return added
 
 
 def grade_touchdown_predictions(session: Session, regrade: bool = False) -> int:
     """Grade immutable TD predictions for games whose final score is available."""
-    statement = select(TouchdownPrediction, Game).join(Game).where(Game.home_score.is_not(None), Game.away_score.is_not(None))
+    statement = select(TouchdownPrediction, Game).join(Game).where(Game.home_score.is_not(None), Game.away_score.is_not(None), TouchdownPrediction.publication_status == "ACTIVE")
     if not regrade:
         statement = statement.where(TouchdownPrediction.result.is_(None))
     pending = session.execute(statement).all()
@@ -98,3 +110,16 @@ def _active_player_features(roster: pd.DataFrame, history: pd.DataFrame) -> pd.D
 def _latest_model_path() -> Path | None:
     models = sorted(MODEL_DIRECTORY.glob("nfl_td_*.joblib"), key=lambda path: path.stat().st_mtime, reverse=True)
     return models[0] if models else None
+
+
+def _void_unavailable_predictions(session: Session, game_id: str) -> int:
+    unavailable = set(session.scalars(select(NflTdAvailability.player_id).where(NflTdAvailability.game_id == game_id, NflTdAvailability.status == "OUT")).all())
+    if not unavailable:
+        return 0
+    predictions = session.scalars(select(TouchdownPrediction).where(TouchdownPrediction.game_id == game_id, TouchdownPrediction.publication_status == "ACTIVE")).all()
+    now = datetime.now(timezone.utc); voided = 0
+    for prediction in predictions:
+        if prediction.player_id in unavailable:
+            prediction.publication_status, prediction.voided_at = "VOID", now
+            voided += 1
+    return voided

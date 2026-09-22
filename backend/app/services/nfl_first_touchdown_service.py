@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.prediction import FirstTouchdownPrediction, TouchdownPrediction
+from app.models.td_availability import NflTdAvailability
 from app.services.nfl_td_data import PBP_URL
 
 
@@ -21,19 +22,24 @@ def publish_first_touchdown_predictions(session: Session) -> int:
     games = session.scalars(select(Game).where(Game.season == next_game.season, Game.week == next_game.week, Game.status == "scheduled")).all()
     added = 0
     for game in games:
-        if session.scalar(select(FirstTouchdownPrediction.id).where(FirstTouchdownPrediction.game_id == game.id)) is not None:
+        unavailable = set(session.scalars(select(NflTdAvailability.player_id).where(NflTdAvailability.game_id == game.id, NflTdAvailability.status == "OUT")).all())
+        existing = session.scalars(select(FirstTouchdownPrediction).where(FirstTouchdownPrediction.game_id == game.id, FirstTouchdownPrediction.publication_status == "ACTIVE")).all()
+        for prediction in existing:
+            if prediction.player_id in unavailable:
+                prediction.publication_status, prediction.voided_at = "VOID", datetime.now(timezone.utc)
+        if any(prediction.publication_status == "ACTIVE" for prediction in existing):
             continue
-        candidate = session.scalar(select(TouchdownPrediction).where(TouchdownPrediction.game_id == game.id).order_by(TouchdownPrediction.probability.desc()))
+        candidate = session.scalar(select(TouchdownPrediction).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.publication_status == "ACTIVE").order_by(TouchdownPrediction.probability.desc()))
         if candidate is None:
             continue
-        session.add(FirstTouchdownPrediction(game_id=game.id, player_id=candidate.player_id, player_name=candidate.player_name, team=candidate.team, model_version=f"first_td_from_{candidate.model_version}", timestamp=datetime.now(timezone.utc), anytime_probability=candidate.probability))
+        session.add(FirstTouchdownPrediction(game_id=game.id, player_id=candidate.player_id, player_name=candidate.player_name, team=candidate.team, model_version=f"first_td_from_{candidate.model_version}", timestamp=datetime.now(timezone.utc), anytime_probability=candidate.probability, publication_status="ACTIVE"))
         added += 1
     session.commit()
     return added
 
 
 def grade_first_touchdown_predictions(session: Session, regrade: bool = False) -> int:
-    statement = select(FirstTouchdownPrediction, Game).join(Game).where(Game.home_score.is_not(None), Game.away_score.is_not(None))
+    statement = select(FirstTouchdownPrediction, Game).join(Game).where(Game.home_score.is_not(None), Game.away_score.is_not(None), FirstTouchdownPrediction.publication_status == "ACTIVE")
     if not regrade:
         statement = statement.where(FirstTouchdownPrediction.result.is_(None))
     pending = session.execute(statement).all()

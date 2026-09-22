@@ -50,6 +50,8 @@ class TouchdownPrediction(Base):
     two_td_call: Mapped[bool] = mapped_column(default=False)
     result: Mapped[str | None] = mapped_column(String(8), nullable=True)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    publication_status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FirstTouchdownPrediction(Base):
@@ -64,3 +66,5 @@ class FirstTouchdownPrediction(Base):
     anytime_probability: Mapped[float] = mapped_column(Float)
     result: Mapped[str | None] = mapped_column(String(8), nullable=True)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    publication_status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

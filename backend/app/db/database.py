@@ -40,13 +40,24 @@ def get_db() -> Generator[Session, None, None]:
 
 def initialize_database() -> None:
     """Create the V0.1 tables when they do not yet exist."""
-    from app.models import cfb, game, mlb, odds, player_stats, prediction, qb_status  # noqa: F401
+    from app.models import cfb, game, mlb, odds, player_stats, prediction, qb_status, td_availability  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     columns = {column["name"] for column in inspect(engine).get_columns("predictions")}
     if "odds_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE predictions ADD COLUMN odds_id INTEGER"))
+    touchdown_columns = {column["name"] for column in inspect(engine).get_columns("touchdown_predictions")}
+    first_touchdown_columns = {column["name"] for column in inspect(engine).get_columns("first_touchdown_predictions")}
+    with engine.begin() as connection:
+        if "publication_status" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN publication_status VARCHAR(16) DEFAULT 'ACTIVE'"))
+        if "voided_at" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN voided_at DATETIME"))
+        if "publication_status" not in first_touchdown_columns:
+            connection.execute(text("ALTER TABLE first_touchdown_predictions ADD COLUMN publication_status VARCHAR(16) DEFAULT 'ACTIVE'"))
+        if "voided_at" not in first_touchdown_columns:
+            connection.execute(text("ALTER TABLE first_touchdown_predictions ADD COLUMN voided_at DATETIME"))
     touchdown_columns = {column["name"] for column in inspect(engine).get_columns("touchdown_predictions")}
     with engine.begin() as connection:
         if "two_td_probability" not in touchdown_columns:
