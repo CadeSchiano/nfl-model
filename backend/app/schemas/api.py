@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ORMModel(BaseModel):
@@ -45,3 +45,11 @@ class PredictionRead(ORMModel):
     spread_difference: float | None
     market_home_probability: float | None
     moneyline_difference: float | None
+
+
+class QbStatusWrite(BaseModel):
+    game_id: str
+    team: str
+    player_name: str | None = None
+    status: str = Field(pattern="^(healthy|questionable|out|backup)$")
+    adjustment_points: float = Field(ge=-15, le=0)
