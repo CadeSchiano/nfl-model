@@ -24,4 +24,14 @@ def history(db: Session = Depends(get_db)):
     data = [_row(prediction, game, result) for prediction, game, result in rows]
     actionable = [item for item in data if item["recommendation"] != "PASS"]
     wins = sum(item["result"] == "WIN" for item in actionable); losses = sum(item["result"] == "LOSS" for item in actionable); pushes = sum(item["result"] == "PUSH" for item in actionable)
-    return {"predictions": data, "record": {"wins": wins, "losses": losses, "pushes": pushes}}
+    weekly: dict[tuple[int, int], dict] = {}
+    for prediction, game, result in rows:
+        summary = weekly.setdefault((game.season, game.week), {"season": game.season, "week": game.week, "over": {"wins": 0, "losses": 0, "pushes": 0}, "under": {"wins": 0, "losses": 0, "pushes": 0}, "passes": 0})
+        if prediction.recommendation == "PASS":
+            summary["passes"] += 1
+        elif prediction.recommendation in {"OVER", "UNDER"}:
+            bucket = summary[prediction.recommendation.lower()]
+            if result.result == "WIN": bucket["wins"] += 1
+            elif result.result == "LOSS": bucket["losses"] += 1
+            elif result.result == "PUSH": bucket["pushes"] += 1
+    return {"weekly": sorted(weekly.values(), key=lambda item: (item["season"], item["week"]), reverse=True), "record": {"wins": wins, "losses": losses, "pushes": pushes}}
