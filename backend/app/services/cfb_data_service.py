@@ -57,10 +57,13 @@ def import_cfb_market_totals(session: Session) -> int:
     response = requests.get(ODDS_URL, params={"apiKey": load_odds_api_key(), "regions": "us", "markets": "totals", "oddsFormat": "american"}, timeout=30)
     response.raise_for_status()
     games = session.scalars(select(CfbGame).where(CfbGame.status == "scheduled", CfbGame.kickoff > datetime.now(timezone.utc))).all()
+    canonical_names = _cfbd_market_name_map()
     lookup = {_name_key(game.away_team) + "|" + _name_key(game.home_team): game for game in games}
     added = 0
     for event in response.json():
-        game = lookup.get(_name_key(event["away_team"]) + "|" + _name_key(event["home_team"]))
+        away = canonical_names.get(_name_key(event["away_team"]), _name_key(event["away_team"]))
+        home = canonical_names.get(_name_key(event["home_team"]), _name_key(event["home_team"]))
+        game = lookup.get(_name_key(away) + "|" + _name_key(home))
         if game is None:
             continue
         for bookmaker in event.get("bookmakers", []):
@@ -74,10 +77,19 @@ def import_cfb_market_totals(session: Session) -> int:
 
 
 def _name_key(name: str) -> str:
-    mascots = {"flames", "chanticleers", "black knights", "owls", "midshipmen", "blazers", "crimson tide", "buckeyes", "tigers", "bulldogs", "wildcats", "horned frogs", "mountaineers", "cardinals", "hurricanes", "seminoles", "golden eagles", "gamecocks", "wolfpack", "yellow jackets", "blue devils", "tar heels", "bearcats", "cougars", "knights", "boilermakers", "wolverines", "spartans", "badgers", "hawkeyes", "cyclones", "jayhawks", "longhorns", "aggies", "razorbacks", "rebels", "commodores", "gators", "volunteers", "crimson", "trojans", "bruins", "sun devils", "utes", "beavers", "ducks", "huskies", "golden bears", "broncos", "falcons", "lobos", "rams", "rebels", "aztecs", "bobcats", "red raiders", "mean green", "roadrunners", "miners", "thundering herd", "panthers", "eagles", "jaguars", "warhawks", "raging cajuns", "bobcats", "red wolves"}
-    text = name.lower().replace("&", "and")
-    for mascot in sorted(mascots, key=len, reverse=True):
-        if text.endswith(" " + mascot):
-            text = text[: -len(mascot) - 1]
-            break
-    return "".join(character for character in text if character.isalnum())
+    return "".join(character for character in name.lower().replace("&", "and") if character.isalnum())
+
+
+def _cfbd_market_name_map() -> dict[str, str]:
+    """Map sportsbook school-plus-mascot labels back to CFBD school names."""
+    response = requests.get(f"{CFBD_URL}/teams/fbs", params={"year": datetime.now().year}, headers={"Authorization": f"Bearer {_cfbd_key()}"}, timeout=60)
+    response.raise_for_status()
+    names: dict[str, str] = {}
+    for team in response.json():
+        school, mascot = team["school"], team.get("mascot") or ""
+        aliases = [school, f"{school} {mascot}", *team.get("alternateNames", [])]
+        for alias in aliases:
+            names[_name_key(alias)] = school
+            if mascot:
+                names[_name_key(f"{alias} {mascot}")] = school
+    return names
