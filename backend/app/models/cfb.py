@@ -17,6 +17,8 @@ class CfbGame(Base):
     kickoff: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     home_team: Mapped[str] = mapped_column(String(100), index=True)
     away_team: Mapped[str] = mapped_column(String(100), index=True)
+    home_conference: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    away_conference: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     home_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     away_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(16), index=True)

@@ -74,6 +74,12 @@ def initialize_database() -> None:
             connection.execute(text("ALTER TABLE games ADD COLUMN away_rest INTEGER"))
         if "division_game" not in game_columns:
             connection.execute(text("ALTER TABLE games ADD COLUMN division_game BOOLEAN DEFAULT 0"))
+    cfb_game_columns = {column["name"] for column in inspect(engine).get_columns("cfb_games")}
+    with engine.begin() as connection:
+        if "home_conference" not in cfb_game_columns:
+            connection.execute(text("ALTER TABLE cfb_games ADD COLUMN home_conference VARCHAR(80)"))
+        if "away_conference" not in cfb_game_columns:
+            connection.execute(text("ALTER TABLE cfb_games ADD COLUMN away_conference VARCHAR(80)"))
     mlb_game_columns = {column["name"] for column in inspect(engine).get_columns("mlb_games")}
     mlb_prediction_columns = {column["name"] for column in inspect(engine).get_columns("mlb_hr_predictions")}
     mlb_game_prediction_columns = {column["name"] for column in inspect(engine).get_columns("mlb_game_predictions")}

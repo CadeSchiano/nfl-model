@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -9,13 +9,22 @@ router = APIRouter(prefix="/cfb", tags=["cfb"])
 
 
 def _row(prediction, game, result=None):
-    return {"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "kickoff": game.kickoff, "market_total": prediction.market_total, "projected_total": prediction.projected_total, "edge": prediction.edge, "recommendation": prediction.recommendation, "model_version": prediction.model_version, "result": result.result if result else None, "actual_total": result.actual_total if result else None}
+    return {"id": prediction.id, "away_team": game.away_team, "home_team": game.home_team, "away_conference": game.away_conference, "home_conference": game.home_conference, "kickoff": game.kickoff, "market_total": prediction.market_total, "projected_total": prediction.projected_total, "edge": prediction.edge, "recommendation": prediction.recommendation, "model_version": prediction.model_version, "result": result.result if result else None, "actual_total": result.actual_total if result else None}
 
 
 @router.get("/predictions")
-def predictions(db: Session = Depends(get_db)):
-    rows = db.execute(select(CfbTotalPrediction, CfbGame).join(CfbGame).where(CfbGame.status == "scheduled").order_by(CfbGame.kickoff)).all()
+def predictions(conference: str | None = Query(default=None), db: Session = Depends(get_db)):
+    statement = select(CfbTotalPrediction, CfbGame).join(CfbGame).where(CfbGame.status == "scheduled")
+    if conference:
+        statement = statement.where(or_(CfbGame.home_conference == conference, CfbGame.away_conference == conference))
+    rows = db.execute(statement.order_by(CfbGame.kickoff)).all()
     return [_row(prediction, game) for prediction, game in rows]
+
+
+@router.get("/conferences")
+def conferences(db: Session = Depends(get_db)):
+    rows = db.execute(select(CfbGame.home_conference, CfbGame.away_conference).join(CfbTotalPrediction).where(CfbGame.status == "scheduled")).all()
+    return sorted({conference for row in rows for conference in row if conference})
 
 
 @router.get("/history")

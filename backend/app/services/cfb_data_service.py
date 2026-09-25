@@ -43,7 +43,7 @@ def import_fbs_games(session: Session, seasons: range) -> int:
             home_score, away_score = item.get("homePoints"), item.get("awayPoints")
             final = bool(item.get("completed")) and home_score is not None and away_score is not None
             game = session.get(CfbGame, game_id)
-            values = {"season": int(item["season"]), "week": int(item["week"]), "kickoff": datetime.fromisoformat(item["startDate"].replace("Z", "+00:00")), "home_team": item["homeTeam"], "away_team": item["awayTeam"], "home_score": int(home_score) if final else None, "away_score": int(away_score) if final else None, "status": "final" if final else "scheduled"}
+            values = {"season": int(item["season"]), "week": int(item["week"]), "kickoff": datetime.fromisoformat(item["startDate"].replace("Z", "+00:00")), "home_team": item["homeTeam"], "away_team": item["awayTeam"], "home_conference": item.get("homeConference"), "away_conference": item.get("awayConference"), "home_score": int(home_score) if final else None, "away_score": int(away_score) if final else None, "status": "final" if final else "scheduled"}
             if game is None:
                 session.add(CfbGame(id=game_id, **values)); added += 1
             else:
