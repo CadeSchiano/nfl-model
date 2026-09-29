@@ -9,6 +9,9 @@ venv/
 
 # Environment and local state
 .env
+.env.*
+!.env.example
+!**/.env.example
 *.sqlite3
 *.db
 
