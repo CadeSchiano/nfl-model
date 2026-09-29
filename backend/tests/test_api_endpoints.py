@@ -54,7 +54,24 @@ def test_game_endpoint_serializes_a_persisted_game() -> None:
 
 
 def test_game_endpoint_returns_a_useful_404_for_an_unknown_game() -> None:
-    response = TestClient(app).get("/games/not-a-real-game")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine)
+
+    def override_db():
+        with TestSession() as test_session:
+            yield test_session
+
+    app.dependency_overrides[get_db] = override_db
+    try:
+        response = TestClient(app).get("/games/not-a-real-game")
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
 
     assert response.status_code == 404
     assert response.json() == {"detail": "game not found"}
