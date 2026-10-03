@@ -11,30 +11,39 @@ from app.models.mlb import MlbGame, MlbPlayerGame
 
 
 MLB_API = "https://statsapi.mlb.com/api/v1"
+# MLB Stats API codes: regular season, Wild Card, Division Series, League
+# Championship Series, and World Series.  Keeping this list explicit avoids
+# silently dropping postseason games after the regular season ends.
+MLB_GAME_TYPES = "R,F,D,L,W"
 
 
 def update_completed_games(session: Session, start: date | None = None, end: date | None = None) -> int:
-    """Fetch and persist final regular-season MLB games without duplicate rows."""
+    """Fetch and persist scored regular-season and postseason MLB games."""
     # Future scheduled games must never advance the completed-results cursor.
     end = end or date.today()
     # Recheck a small overlap every day.  It is idempotent and avoids skipped
     # finals when schedules are imported before a game's final status arrives.
     start = start or (end - timedelta(days=3))
-    schedule = _get("schedule", {"sportId": 1, "gameType": "R", "startDate": start.isoformat(), "endDate": end.isoformat()})
+    schedule = _get("schedule", {"sportId": 1, "gameType": MLB_GAME_TYPES, "startDate": start.isoformat(), "endDate": end.isoformat()})
     imported = 0
     for day in schedule.get("dates", []):
         for game in day.get("games", []):
             if game.get("status", {}).get("abstractGameState") != "Final":
                 continue
-            ingest_completed_game(session, get_live_feed(int(game["gamePk"])))
+            imported_game = ingest_completed_game(session, get_live_feed(int(game["gamePk"])))
             # Persist each game so a long historical backfill can safely resume.
             session.commit()
-            imported += 1
+            imported += int(imported_game)
     return imported
 
 
-def ingest_completed_game(session: Session, feed: dict) -> None:
-    """Upsert one final feed and the players who actually appeared."""
+def ingest_completed_game(session: Session, feed: dict) -> bool:
+    """Upsert one scored final feed and the players who actually appeared.
+
+    A schedule can briefly report ``Final`` before its detailed feed has a
+    linescore. Such a record is retained for a later retry but is never made a
+    completed training/prediction input without both final scores.
+    """
     data, live = feed["gameData"], feed["liveData"]
     game_pk = int(feed["gamePk"])
     teams = data["teams"]
@@ -43,8 +52,13 @@ def ingest_completed_game(session: Session, feed: dict) -> None:
         game = MlbGame(id=game_pk, game_date=_dt(data["datetime"]["dateTime"]), official_date=date.fromisoformat(data["datetime"]["officialDate"]), home_team=teams["home"]["name"], away_team=teams["away"]["name"], home_score=None, away_score=None, status="final")
         session.add(game)
     linescore = live.get("linescore", {}).get("teams", {})
-    game.home_score = linescore.get("home", {}).get("runs")
-    game.away_score = linescore.get("away", {}).get("runs")
+    home_score = linescore.get("home", {}).get("runs")
+    away_score = linescore.get("away", {}).get("runs")
+    if home_score is None or away_score is None:
+        game.status, game.completed_at = "incomplete", None
+        return False
+    game.home_score = int(home_score)
+    game.away_score = int(away_score)
     game.status, game.completed_at = "final", datetime.now(timezone.utc)
 
     appeared, homers = _appearance_and_hr(feed)
@@ -61,6 +75,7 @@ def ingest_completed_game(session: Session, feed: dict) -> None:
                 session.add(MlbPlayerGame(game_id=game_pk, player_id=player_id, **values))
             else:
                 for field, value in values.items(): setattr(record, field, value)
+    return True
 
 
 def _appearance_and_hr(feed: dict) -> tuple[set[int], dict[int, int]]:

@@ -11,19 +11,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.mlb import MlbGame, MlbHrPrediction, MlbModelVersion, MlbPlayerGame
-from app.services.mlb_data import _dt, _get, get_live_feed
+from app.services.mlb_data import MLB_GAME_TYPES, _dt, _get, get_live_feed
 from app.services.mlb_feature_service import ROLLING_WINDOW
 
 
 def update_schedule(session: Session, game_date: date | None = None) -> int:
-    """Upsert the day's MLB regular-season schedule and probable pitchers."""
+    """Upsert the day's regular-season or postseason schedule and pitchers."""
     game_date = game_date or date.today()
-    schedule = _get("schedule", {"sportId": 1, "gameType": "R", "date": game_date.isoformat(), "hydrate": "probablePitcher"})
+    schedule = _get("schedule", {"sportId": 1, "gameType": MLB_GAME_TYPES, "date": game_date.isoformat(), "hydrate": "probablePitcher"})
     updated = 0
     for day in schedule.get("dates", []):
         for item in day.get("games", []):
             game_id = int(item["gamePk"])
-            status = "final" if item.get("status", {}).get("abstractGameState") == "Final" else "scheduled"
             game = session.get(MlbGame, game_id)
             if game is None:
                 game = MlbGame(
@@ -34,11 +33,13 @@ def update_schedule(session: Session, game_date: date | None = None) -> int:
                     away_team=item["teams"]["away"]["team"]["name"],
                     home_score=None,
                     away_score=None,
-                    status=status,
+                    # Results are imported only from the detailed game feed,
+                    # which guarantees a score before a game becomes final.
+                    status="scheduled",
                 )
                 session.add(game)
-            if game.status != "final":
-                game.status = status
+            if game.status != "final" or game.home_score is None or game.away_score is None:
+                game.status = "scheduled"
                 game.probable_home_pitcher = item["teams"]["home"].get("probablePitcher", {}).get("fullName")
                 game.probable_away_pitcher = item["teams"]["away"].get("probablePitcher", {}).get("fullName")
             updated += 1

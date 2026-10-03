@@ -51,7 +51,7 @@ def publish_game_predictions(session: Session, now: datetime | None = None) -> i
         raise ValueError("train an MLB game model before publishing predictions")
     payload = joblib.load(version.artifact_path)
     games = session.scalars(select(MlbGame).where(MlbGame.status == "scheduled", MlbGame.game_date > now).order_by(MlbGame.game_date)).all()
-    history = _team_history(session.scalars(select(MlbGame).where(MlbGame.status == "final", MlbGame.game_date < now).order_by(MlbGame.game_date, MlbGame.id)).all())
+    history = _team_history(session.scalars(select(MlbGame).where(MlbGame.status == "final", MlbGame.home_score.is_not(None), MlbGame.away_score.is_not(None), MlbGame.game_date < now).order_by(MlbGame.game_date, MlbGame.id)).all())
     created = 0
     for game in games:
         if session.scalar(select(MlbGamePrediction.id).where(MlbGamePrediction.game_id == game.id)):
@@ -96,6 +96,8 @@ def _team_history(games: list[MlbGame]) -> dict[str, deque[tuple[int, float]]]:
     history: dict[str, deque[tuple[int, float]]] = defaultdict(lambda: deque(maxlen=TEAM_WINDOW))
     for _, group in groupby(games, key=lambda game: game.game_date):
         for game in list(group):
+            if game.home_score is None or game.away_score is None:
+                continue
             margin = game.home_score - game.away_score
             history[game.home_team].append((int(margin > 0), margin))
             history[game.away_team].append((int(margin < 0), -margin))
