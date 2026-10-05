@@ -52,7 +52,7 @@ For historical NFL games, `backend/app/ml/features.py` reads each team's state b
 
 The moneyline target is whether the home team won. The margin target is home score minus away score. Missing numeric values are median-imputed inside the scikit-learn pipelines; numeric features are standardized for logistic/Ridge models. The NFL training script selects between linear and Ridge margin models using only the 2023–24 validation seasons, then evaluates the selected approach on the held-out 2025 season before saving models refit on 2015–24 data.
 
-The live NFL publisher currently builds game features from completed 2025 strength and Elo history for scheduled 2026 games. It is not a weekly retrained NFL game model. That is an important limitation and should remain explicit when interpreting current-season projections.
+New NFL predictions blend prior-season strength with only completed current-season games before the target week's first kickoff. Elo is updated through those completed current-season results. The saved game-model artifacts are not retrained weekly; they are refit through the documented offline training workflow.
 
 ### Leakage controls inspected
 
@@ -216,7 +216,7 @@ data/                   local-only generated data and SQLite database
 
 ## Limitations
 
-- Current NFL game projections are not refreshed by a weekly retraining loop.
+- The NFL game-model artifacts are not refreshed by a weekly retraining loop, even though newly published features incorporate completed current-season games.
 - Injury information is manual QB status input, not a live injury feed.
 - NFL first-touchdown picks are a heuristic layered on anytime-TD rankings, not an independently trained first-TD model.
 - MLB data availability, lineup confirmation, and market coverage can limit prediction publication.
