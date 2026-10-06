@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.ml.nfl_td_model import FEATURES
 from app.models.game import Game
 from app.models.prediction import TouchdownPrediction
+from app.models.player_availability import NflPlayerAvailability
 from app.models.td_availability import NflTdAvailability
 from app.services.nfl_td_data import download_active_roster, download_td_player_games
 
@@ -46,6 +47,7 @@ def publish_touchdown_predictions(session: Session) -> int:
     for game in games:
         _void_unavailable_predictions(session, game.id)
         unavailable = set(session.scalars(select(NflTdAvailability.player_id).where(NflTdAvailability.game_id == game.id, NflTdAvailability.status == "OUT")).all())
+        unavailable.update(session.scalars(select(NflPlayerAvailability.player_id).where(NflPlayerAvailability.status == "OUT")).all())
         game_candidates = candidates.loc[candidates.team.isin([game.home_team, game.away_team]) & ~candidates.player_id.isin(unavailable)].sort_values("probability", ascending=False).copy()
         if game_candidates.empty:
             continue

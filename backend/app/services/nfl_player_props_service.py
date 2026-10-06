@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.game import Game
+from app.models.player_availability import NflPlayerAvailability
 from app.services.elo_service import canonical_team_code
 from app.services.nfl_td_data import PBP_URL, download_active_roster
 
@@ -50,7 +51,8 @@ def current_week_player_props(session: Session) -> list[dict]:
         game.away_team: (game, game.home_team)
         for game in games
     }
-    return _project(roster, player_games, defense_allowed, dates, matchups)
+    unavailable = set(session.scalars(select(NflPlayerAvailability.player_id).where(NflPlayerAvailability.status == "OUT")).all())
+    return _project(roster, player_games, defense_allowed, dates, matchups, unavailable)
 
 
 def _season_plays(season: int, completed_ids: set[str]) -> pd.DataFrame:
@@ -113,6 +115,7 @@ def _project(
     defense_allowed: pd.DataFrame,
     game_dates: dict[str, object],
     matchups: dict[str, tuple[Game, str]],
+    unavailable: set[str] | None = None,
 ) -> list[dict]:
     player_games = player_games.copy()
     player_games["date"] = player_games.game_id.map(game_dates)
@@ -121,8 +124,9 @@ def _project(
     league_average = defense_per_game.groupby("prop").yards.mean().to_dict()
     allowed = defense_per_game.set_index(["team", "prop"]).yards.to_dict()
     rows = []
+    unavailable = unavailable or set()
     for player in roster.itertuples(index=False):
-        if player.position not in PROP_BY_POSITION or player.team not in matchups:
+        if player.position not in PROP_BY_POSITION or player.team not in matchups or str(player.gsis_id) in unavailable:
             continue
         prop, label = PROP_BY_POSITION[player.position]
         history = player_games.loc[
