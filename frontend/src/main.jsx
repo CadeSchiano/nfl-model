@@ -70,12 +70,16 @@ function TouchdownPredictionsV2() {
 function PlayerProps() {
   const data = useData('/player-props/current-week')
   const [position, setPosition] = useState('')
+  const [selectedGame, setSelectedGame] = useState('')
   if (data.loading) return <Loading />
   if (data.error) return <Empty>Player yardage projections are unavailable. They need completed NFL game data for this season.</Empty>
-  const projections = (data.data || []).filter(item => !position || item.position === position)
+  const allProjections = data.data || []
+  const games = [...new Map(allProjections.map(item => [item.game_id, item])).values()]
+  const gameId = selectedGame || games[0]?.game_id || ''
+  const projections = allProjections.filter(item => item.game_id === gameId && (!position || item.position === position))
   return <>
     <section className="hero"><p className="eyebrow">NFL PLAYER YARDAGE PROJECTIONS</p><h1>Player props</h1><p>Pregame passing, rushing, and receiving-yard projections from each player’s last five completed games, adjusted modestly for the opponent’s season average allowed. These are model estimates, not sportsbook lines.</p></section>
-    <label className="batter-picker">Position<select value={position} onChange={event => setPosition(event.target.value)}><option value="">All positions</option><option value="QB">Quarterbacks</option><option value="RB">Running backs</option><option value="WR">Wide receivers</option><option value="TE">Tight ends</option></select></label>
+    <div className="batter-search"><label>Game<select value={gameId} onChange={event => setSelectedGame(event.target.value)}>{games.map(game => <option value={game.game_id} key={game.game_id}>{game.away_team} @ {game.home_team} · {easternTime(game.date)}</option>)}</select></label><label>Position<select value={position} onChange={event => setPosition(event.target.value)}><option value="">All positions</option><option value="QB">Quarterbacks</option><option value="RB">Running backs</option><option value="WR">Wide receivers</option><option value="TE">Tight ends</option></select></label></div>
     {projections.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Player</th><th>Pos.</th><th>Projection</th><th>Projected yards</th><th>Last 5 average</th><th>Opponent allowed</th><th>Games used</th></tr></thead><tbody>{projections.map(item => <tr key={`${item.game_id}-${item.player_id}-${item.prop}`}><td>{item.away_team} @ {item.home_team}</td><td className="accent">{item.player_name}</td><td>{item.position}</td><td>{item.prop.replace('_', ' ')}</td><td className="accent">{item.projected_yards.toFixed(1)}</td><td>{item.recent_average_yards.toFixed(1)}</td><td>{item.opponent_allowed_yards.toFixed(1)}</td><td>{item.games_used}</td></tr>)}</tbody></table></div> : <Empty>No eligible current-week player projections match this filter.</Empty>}
   </>
 }
