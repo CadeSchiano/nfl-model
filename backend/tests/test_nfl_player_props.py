@@ -31,3 +31,20 @@ def test_unavailable_player_is_excluded_from_projection_rows() -> None:
     game = Game(id="g", season=2026, week=6, date=datetime(2026, 10, 11, tzinfo=timezone.utc), home_team="TB", away_team="ATL", status="scheduled")
 
     assert _project(roster, player_games, defense_allowed, {}, {"TB": (game, "ATL")}, {"out-player"}) == []
+
+
+def test_expected_starting_qb_uses_team_passing_volume() -> None:
+    roster = pd.DataFrame([{"gsis_id": "backup", "full_name": "Backup QB", "team": "TB", "position": "QB"}])
+    player_games = pd.DataFrame([
+        {"game_id": "old", "team": "TB", "player_id": "backup", "player_name": "Backup QB", "prop": "passing", "yards": 20.0},
+        {"game_id": "old", "team": "TB", "player_id": "starter", "player_name": "Starter QB", "prop": "passing", "yards": 180.0},
+    ])
+    defense_allowed = pd.DataFrame([{"game_id": "old", "team": "ATL", "prop": "passing", "yards": 300.0}])
+    kickoff = datetime(2026, 10, 11, tzinfo=timezone.utc)
+    game = Game(id="g", season=2026, week=6, date=kickoff, home_team="TB", away_team="ATL", status="scheduled")
+
+    rows = _project(roster, player_games, defense_allowed, {"old": kickoff}, {"TB": (game, "ATL")}, expected_starters={"g": "backup"})
+
+    assert rows[0]["starter_override"] is True
+    assert rows[0]["recent_average_yards"] == 200.0
+    assert rows[0]["projected_yards"] == 200.0

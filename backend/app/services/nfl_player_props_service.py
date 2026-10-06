@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.player_availability import NflPlayerAvailability
+from app.models.qb_starter import NflExpectedQbStarter
 from app.services.elo_service import canonical_team_code
 from app.services.nfl_td_data import PBP_URL, download_active_roster
 
@@ -52,7 +53,11 @@ def current_week_player_props(session: Session) -> list[dict]:
         for game in games
     }
     unavailable = set(session.scalars(select(NflPlayerAvailability.player_id).where(NflPlayerAvailability.status == "OUT")).all())
-    return _project(roster, player_games, defense_allowed, dates, matchups, unavailable)
+    starters = {
+        row.game_id: row.player_id
+        for row in session.scalars(select(NflExpectedQbStarter).where(NflExpectedQbStarter.game_id.in_([game.id for game in games]))).all()
+    }
+    return _project(roster, player_games, defense_allowed, dates, matchups, unavailable, starters)
 
 
 def _season_plays(season: int, completed_ids: set[str]) -> pd.DataFrame:
@@ -116,6 +121,7 @@ def _project(
     game_dates: dict[str, object],
     matchups: dict[str, tuple[Game, str]],
     unavailable: set[str] | None = None,
+    expected_starters: dict[str, str] | None = None,
 ) -> list[dict]:
     player_games = player_games.copy()
     player_games["date"] = player_games.game_id.map(game_dates)
@@ -125,20 +131,26 @@ def _project(
     allowed = defense_per_game.set_index(["team", "prop"]).yards.to_dict()
     rows = []
     unavailable = unavailable or set()
+    expected_starters = expected_starters or {}
     for player in roster.itertuples(index=False):
         if player.position not in PROP_BY_POSITION or player.team not in matchups or str(player.gsis_id) in unavailable:
             continue
         prop, label = PROP_BY_POSITION[player.position]
+        game, opponent = matchups[player.team]
+        starter_override = player.position == "QB" and expected_starters.get(game.id) == str(player.gsis_id)
         history = player_games.loc[
             (player_games.player_id == str(player.gsis_id))
             & (player_games.prop == prop)
         ].sort_values("date").tail(5)
+        if starter_override:
+            history = player_games.loc[
+                (player_games.team == player.team) & (player_games.prop == "passing")
+            ].groupby(["game_id", "date"], as_index=False).yards.sum().sort_values("date").tail(5)
         if history.empty:
             continue
         # A small sample can be negative (for example, a back stopped behind the
         # line on each carry). A negative yardage projection is not useful here.
         player_average = max(0.0, float(history.yards.mean()))
-        game, opponent = matchups[player.team]
         opponent_average = float(allowed.get((opponent, prop), league_average.get(prop, 0.0)))
         league = float(league_average.get(prop, opponent_average or 1.0))
         projected = _projection(player_average, opponent_average, league)
@@ -156,6 +168,7 @@ def _project(
             "recent_average_yards": player_average,
             "opponent_allowed_yards": opponent_average,
             "games_used": int(len(history)),
+            "starter_override": starter_override,
         })
     return sorted(rows, key=lambda item: (item["date"], item["prop"], -item["projected_yards"]))
 
