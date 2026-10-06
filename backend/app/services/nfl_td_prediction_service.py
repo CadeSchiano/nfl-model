@@ -22,7 +22,7 @@ BASE_HISTORY_PATH = ROOT / "data/processed/nfl_td_player_games_2019_2025.parquet
 
 
 def publish_touchdown_predictions(session: Session) -> int:
-    """Publish the top two or three active skill players for each next-week game."""
+    """Publish three core TD picks plus an eligible usage-backed longshot."""
     now = datetime.now(timezone.utc)
     next_game = session.scalar(select(Game).where(Game.status == "scheduled", Game.date >= now).order_by(Game.date))
     if next_game is None:
@@ -49,24 +49,38 @@ def publish_touchdown_predictions(session: Session) -> int:
         game_candidates = candidates.loc[candidates.team.isin([game.home_team, game.away_team]) & ~candidates.player_id.isin(unavailable)].sort_values("probability", ascending=False).copy()
         if game_candidates.empty:
             continue
-        active_ids = set(session.scalars(select(TouchdownPrediction.player_id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.publication_status == "ACTIVE")).all())
-        missing = max(0, 3 - len(active_ids))
-        if missing == 0:
-            continue
-        # A 2+ TD call is intentionally rare: at most one per game and only at 8%+.
-        two_td_index = game_candidates.two_td_probability.idxmax()
-        for index, player in game_candidates.iterrows():
-            if str(player.player_id) in active_ids:
-                continue
-            # Do not resurrect a manually voided player in the same game.
-            exists = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.player_id == str(player.player_id)))
-            if exists is not None:
-                continue
-            session.add(TouchdownPrediction(game_id=game.id, player_id=str(player.player_id), player_name=player.player_name, team=player.team, model_version=model_version, timestamp=now, probability=float(player.probability), td_score=int(player.td_score), two_td_probability=float(player.two_td_probability), two_td_call=bool(index == two_td_index and player.two_td_probability >= 0.08), publication_status="ACTIVE"))
-            added += 1
-            missing -= 1
-            if missing == 0:
-                break
+        regular_ids = set(session.scalars(select(TouchdownPrediction.player_id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.publication_status == "ACTIVE", TouchdownPrediction.is_longshot.is_(False))).all())
+        missing = max(0, 3 - len(regular_ids))
+        if missing:
+            # A 2+ TD call is intentionally rare: at most one per game and only at 8%+.
+            two_td_index = game_candidates.two_td_probability.idxmax()
+            for index, player in game_candidates.iterrows():
+                if str(player.player_id) in regular_ids:
+                    continue
+                # Do not resurrect a manually voided player in the same game.
+                exists = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.player_id == str(player.player_id)))
+                if exists is not None:
+                    continue
+                session.add(TouchdownPrediction(game_id=game.id, player_id=str(player.player_id), player_name=player.player_name, team=player.team, model_version=model_version, timestamp=now, probability=float(player.probability), td_score=int(player.td_score), two_td_probability=float(player.two_td_probability), two_td_call=bool(index == two_td_index and player.two_td_probability >= 0.08), is_longshot=False, publication_status="ACTIVE"))
+                added += 1
+                regular_ids.add(str(player.player_id))
+                missing -= 1
+                if missing == 0:
+                    break
+        existing_longshot = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.publication_status == "ACTIVE", TouchdownPrediction.is_longshot.is_(True)))
+        if existing_longshot is None:
+            longshots = game_candidates.loc[
+                ~game_candidates.player_id.astype(str).isin(regular_ids)
+                & (game_candidates.probability >= 0.10)
+                & (game_candidates.probability <= 0.30)
+                & ((game_candidates.carries_avg + game_candidates.targets_avg) >= 3)
+            ]
+            if not longshots.empty:
+                player = longshots.iloc[0]
+                exists = session.scalar(select(TouchdownPrediction.id).where(TouchdownPrediction.game_id == game.id, TouchdownPrediction.player_id == str(player.player_id)))
+                if exists is None:
+                    session.add(TouchdownPrediction(game_id=game.id, player_id=str(player.player_id), player_name=player.player_name, team=player.team, model_version=model_version, timestamp=now, probability=float(player.probability), td_score=int(player.td_score), two_td_probability=float(player.two_td_probability), two_td_call=False, is_longshot=True, publication_status="ACTIVE"))
+                    added += 1
     session.commit()
     return added
 

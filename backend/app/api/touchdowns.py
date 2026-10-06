@@ -13,7 +13,7 @@ router = APIRouter(prefix="/touchdowns", tags=["touchdowns"])
 
 
 def _row(prediction: TouchdownPrediction, game: Game) -> dict:
-    return {"id": prediction.id, "game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "date": game.date, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "td_score": prediction.td_score, "two_td_probability": prediction.two_td_probability, "two_td_call": prediction.two_td_call, "result": prediction.result, "publication_status": prediction.publication_status, "model_version": prediction.model_version}
+    return {"id": prediction.id, "game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "date": game.date, "player_name": prediction.player_name, "team": prediction.team, "probability": prediction.probability, "td_score": prediction.td_score, "two_td_probability": prediction.two_td_probability, "two_td_call": prediction.two_td_call, "is_longshot": prediction.is_longshot, "result": prediction.result, "publication_status": prediction.publication_status, "model_version": prediction.model_version}
 
 
 @router.get("/current-week")

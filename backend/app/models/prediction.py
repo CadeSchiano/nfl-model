@@ -48,6 +48,7 @@ class TouchdownPrediction(Base):
     td_score: Mapped[int] = mapped_column(Integer)
     two_td_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
     two_td_call: Mapped[bool] = mapped_column(default=False)
+    is_longshot: Mapped[bool] = mapped_column(default=False)
     result: Mapped[str | None] = mapped_column(String(8), nullable=True)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     publication_status: Mapped[str] = mapped_column(String(16), default="ACTIVE", index=True)

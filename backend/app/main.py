@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import cfb, elo_ratings, first_touchdowns, games, mlb, nfl_history, nfl_players, odds, performance, predictions, qb_status, td_availability, touchdowns
+from app.api import cfb, elo_ratings, first_touchdowns, games, mlb, nfl_history, nfl_players, odds, performance, player_props, predictions, qb_status, td_availability, touchdowns
 from app.db.database import initialize_database
 
 
@@ -25,6 +25,7 @@ app.include_router(touchdowns.router)
 app.include_router(elo_ratings.router)
 app.include_router(first_touchdowns.router)
 app.include_router(nfl_players.router)
+app.include_router(player_props.router)
 app.include_router(cfb.router)
 app.include_router(qb_status.router)
 app.include_router(td_availability.router)

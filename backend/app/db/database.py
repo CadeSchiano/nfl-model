@@ -66,6 +66,8 @@ def initialize_database() -> None:
             connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN two_td_call BOOLEAN DEFAULT 0"))
         if "graded_at" not in touchdown_columns:
             connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN graded_at DATETIME"))
+        if "is_longshot" not in touchdown_columns:
+            connection.execute(text("ALTER TABLE touchdown_predictions ADD COLUMN is_longshot BOOLEAN DEFAULT 0"))
     game_columns = {column["name"] for column in inspect(engine).get_columns("games")}
     with engine.begin() as connection:
         if "home_rest" not in game_columns:

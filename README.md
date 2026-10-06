@@ -19,7 +19,8 @@ This is an experimental analytics project, not a betting product. Model outputs 
 
 ### Additional isolated workflows
 
-- NFL anytime-touchdown ranking with a weekly logistic-regression workflow, active-roster filtering, immutable HIT/MISS grading, and a simple first-touchdown heuristic based on the top anytime-TD candidate
+- NFL anytime-touchdown ranking with a weekly logistic-regression workflow, active-roster filtering, three core picks plus a usage-qualified longshot per game, immutable HIT/MISS grading, and a simple first-touchdown heuristic based on the top anytime-TD candidate
+- Current-week NFL passing, rushing, and receiving-yard projections based on a player’s last five completed games and the opponent’s season average yards allowed; these are analytical estimates, not sportsbook lines or graded betting recommendations
 - MLB game-winner/margin and lineup-gated home-run workflows with local, versioned model artifacts and postgame grading
 - FBS-vs-FBS college-football total-points projections using rolling same-season scoring features and a Ridge model; FCS matchups are excluded
 
