@@ -108,6 +108,70 @@ function Methodology() { return <><h1>Methodology</h1><div className="method"><h
 function NbaGames() { const data = useData('/nba/games'); if (data.loading) return <Loading />; if (data.error) return <Empty>NBA games are unavailable. Import schedule/results, then publish predictions.</Empty>; return <><section className="hero"><p className="eyebrow">NBA MONEYLINE MODEL · BETA</p><h1>NBA game predictions</h1><p>Rolling team margin and home-court projections. Outputs are analytical estimates, not guarantees.</p></section>{data.data.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Tipoff</th><th>Home win %</th><th>Projected margin</th><th>Model moneyline pick</th></tr></thead><tbody>{data.data.map(game => <tr key={game.id}><td>{game.away_team} @ {game.home_team}</td><td>{easternTime(game.date)}</td><td>{pct(game.home_win_probability)}</td><td>{margin(game.predicted_home_margin)}</td><td className="accent">{game.model_pick}</td></tr>)}</tbody></table></div> : <Empty>No NBA game predictions yet. Run the NBA schedule, results, and prediction scripts first.</Empty>}</> }
 function NbaProps() { const data = useData('/nba/props'); const [selectedGame, setSelectedGame] = useState(''); if (data.loading) return <Loading />; if (data.error) return <Empty>NBA starter props are unavailable.</Empty>; const props = data.data || []; const games = [...new Map(props.map(item => [item.game_id, item])).values()]; const gameId = selectedGame || games[0]?.game_id || ''; const rows = props.filter(item => item.game_id === gameId); return <><section className="hero"><p className="eyebrow">CONFIRMED-STARTER NBA PROJECTIONS</p><h1>NBA player props</h1><p>Points, rebounds, assists, and made-threes projections publish only after a player is manually confirmed as a starter.</p></section>{games.length ? <label className="batter-picker">Game<select value={gameId} onChange={event => setSelectedGame(event.target.value)}>{games.map(game => <option key={game.game_id} value={game.game_id}>{game.away_team} @ {game.home_team} · {easternTime(game.date)}</option>)}</select></label> : null}{rows.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>Team</th><th>Points</th><th>Rebounds</th><th>Assists</th><th>Made threes</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td className="accent">{row.player_name}</td><td>{row.team}</td><td>{row.projected_points.toFixed(1)}</td><td>{row.projected_rebounds.toFixed(1)}</td><td>{row.projected_assists.toFixed(1)}</td><td>{row.projected_threes.toFixed(1)}</td></tr>)}</tbody></table></div> : <Empty>No confirmed-starter props are published for this game.</Empty>}</> }
 function NbaLineups() { const lineups = useData('/nba/lineups'); const games = useData('/nba/games'); const [query, setQuery] = useState(''); const [players, setPlayers] = useState([]); const [gameId, setGameId] = useState(''); const [selected, setSelected] = useState(''); const [message, setMessage] = useState(''); useEffect(() => { if (query.trim().length < 2) { setPlayers([]); return } api(`/nba/players?query=${encodeURIComponent(query.trim())}`).then(setPlayers).catch(() => setPlayers([])) }, [query]); const game = (games.data || []).find(item => item.game_id === gameId); const player = players.find(item => item.player_id === selected); const save = async event => { event.preventDefault(); if (!game || !player) return; try { await post('/nba/lineups', { game_id: gameId, player_id: player.player_id, player_name: player.player_name, team: player.team }); setMessage('Starter saved. Run the NBA player-prediction script, then refresh.') } catch { setMessage('Could not save starter. Make sure the player is on a team in this game and no more than five starters are saved.') } }; if (lineups.loading || games.loading) return <Loading />; if (lineups.error || games.error) return <Empty>NBA lineup input is unavailable.</Empty>; return <><section className="hero"><p className="eyebrow">CONFIRMED STARTERS · MANUAL INPUT</p><h1>NBA lineups</h1><p>Add only officially confirmed starters. Props will never publish for a player until they are here.</p></section><form className="method" onSubmit={save}><label>Game<select required value={gameId} onChange={event => setGameId(event.target.value)}><option value="">Choose game</option>{games.data.map(game => <option key={game.game_id} value={game.game_id}>{game.away_team} @ {game.home_team}</option>)}</select></label><label>Search player<input value={query} onChange={event => { setQuery(event.target.value); setSelected('') }} placeholder="Start typing a player" /></label>{players.length ? <label>Select player<select required value={selected} onChange={event => setSelected(event.target.value)}><option value="">Choose player</option>{players.map(player => <option key={player.player_id} value={player.player_id}>{player.player_name} · {player.team}</option>)}</select></label> : null}<button type="submit" disabled={!game || !player}>Confirm starter</button>{message ? <p className="lede">{message}</p> : null}</form>{lineups.data.length ? <div className="table-wrap"><table><thead><tr><th>Game</th><th>Starter</th><th>Team</th></tr></thead><tbody>{lineups.data.map(item => <tr key={`${item.game_id}-${item.player_id}`}><td>{item.away_team} @ {item.home_team}</td><td>{item.player_name}</td><td>{item.team}</td></tr>)}</tbody></table></div> : <Empty>No starters confirmed yet.</Empty>}</> }
+function NbaLineupsV2() {
+  const lineups = useData('/nba/lineups')
+  const games = useData('/nba/upcoming-games')
+  const [selectedGameId, setSelectedGameId] = useState('')
+  const [roster, setRoster] = useState(null)
+  const [selectedPlayers, setSelectedPlayers] = useState(new Set())
+  const [message, setMessage] = useState('')
+  const gameId = selectedGameId || games.data?.[0]?.game_id || ''
+
+  useEffect(() => {
+    if (!gameId) { setRoster(null); return }
+    let active = true
+    setMessage('')
+    api(`/nba/rosters/${gameId}`).then(data => {
+      if (active) setRoster(data)
+    }).catch(() => {
+      if (active) { setRoster(null); setMessage('Could not load this game’s NBA rosters.') }
+    })
+    return () => { active = false }
+  }, [gameId])
+
+  useEffect(() => {
+    if (!gameId) return
+    setSelectedPlayers(new Set((lineups.data || []).filter(item => item.game_id === gameId).map(item => item.player_id)))
+  }, [gameId, lineups.data])
+
+  const togglePlayer = async player => {
+    try {
+      const result = await post('/nba/lineups/toggle', { game_id: gameId, player_id: player.player_id, player_name: player.player_name, team: player.team })
+      setSelectedPlayers(previous => {
+        const next = new Set(previous)
+        if (result.selected) next.add(player.player_id)
+        else next.delete(player.player_id)
+        return next
+      })
+      setMessage(result.selected ? `${player.player_name} selected.` : `${player.player_name} removed.`)
+    } catch {
+      setMessage('Could not update this starter. Each team can have at most five selected players.')
+    }
+  }
+
+  if (lineups.loading || games.loading) return <Loading />
+  if (lineups.error || games.error) return <Empty>NBA lineup input is unavailable.</Empty>
+  if (!games.data.length) return <Empty>No upcoming NBA games are loaded. Run the NBA schedule update first.</Empty>
+
+  const rosterFor = side => roster?.[side] || []
+  const countFor = team => rosterFor(team === roster?.away_team ? 'away' : 'home').filter(player => selectedPlayers.has(player.player_id)).length
+  const TeamRoster = ({ side, team }) => <div className="method">
+    <h2>{team} roster · {countFor(team)}/5 selected</h2>
+    <p className="lede">Click confirmed starters only. Leave any player unselected if you do not want a projection for them.</p>
+    <div className="search-results">{rosterFor(side).map(player => {
+      const selected = selectedPlayers.has(player.player_id)
+      return <button type="button" className={selected ? 'active' : ''} onClick={() => togglePlayer(player)} key={player.player_id}>{selected ? '✓ ' : ''}{player.player_name}<small>{player.position || 'NBA'} · {team}</small></button>
+    })}</div>
+  </div>
+
+  return <>
+    <section className="hero"><p className="eyebrow">CONFIRMED STARTERS · ROSTER PICKER</p><h1>NBA lineups</h1><p>Choose a game, then click the confirmed starters you want projections for. You can select fewer than five players on either team.</p></section>
+    <label className="batter-picker">Game<select value={gameId} onChange={event => setSelectedGameId(event.target.value)}>{games.data.map(game => <option key={game.game_id} value={game.game_id}>{game.away_team} @ {game.home_team} · {easternTime(game.date)}</option>)}</select></label>
+    {message ? <p className="lede">{message}</p> : null}
+    {roster ? <><TeamRoster side="away" team={roster.away_team} /><TeamRoster side="home" team={roster.home_team} /></> : <Loading />}
+    <p className="lede">When you finish selecting players, run <code>python scripts/generate_nba_player_predictions.py</code> to publish their projections.</p>
+  </>
+}
 function NbaHistory() { const data = useData('/nba/history'); if (data.loading) return <Loading />; if (data.error) return <Empty>NBA history is unavailable.</Empty>; const { game_record: record, games, players } = data.data; return <><h1>NBA history</h1><div className="metric-grid"><article><p>Moneyline record</p><b>{record.wins}-{record.losses}</b><small>{pct(record.accuracy)} accuracy</small></article></div><h2>Game predictions</h2>{games.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Model pick</th><th>Result</th></tr></thead><tbody>{games.map(game => <tr key={game.id}><td>{game.away_team} @ {game.home_team}</td><td>{game.model_pick}</td><td className={game.result === 'WIN' ? 'accent' : ''}>{game.result}</td></tr>)}</tbody></table></div> : <Empty>No graded NBA game predictions yet.</Empty>}<h2>Starter-prop results</h2>{players.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th></tr></thead><tbody>{players.map((row, index) => <tr key={`${row.player_name}-${index}`}><td>{row.player_name}</td><td>{row.projected_points.toFixed(1)} → {row.actual_points}</td><td>{row.projected_rebounds.toFixed(1)} → {row.actual_rebounds}</td><td>{row.projected_assists.toFixed(1)} → {row.actual_assists}</td><td>{row.projected_threes.toFixed(1)} → {row.actual_threes}</td></tr>)}</tbody></table></div> : <Empty>No graded NBA starter props yet.</Empty>}</> }
 function BatterSearch() {
   const [query, setQuery] = useState('')
@@ -175,7 +239,7 @@ function AppV2() {
     : path === '/touchdown-history' ? <TouchdownHistory /> : path === '/player-props' ? <PlayerProps />
     : path === '/nfl-players' ? <NflPlayerStats /> : path === '/performance' ? <Performance />
     : path === '/history' ? <History /> : path === '/nba-games' ? <NbaGames />
-    : path === '/nba-props' ? <NbaProps /> : path === '/nba-lineups' ? <NbaLineups />
+    : path === '/nba-props' ? <NbaProps /> : path === '/nba-lineups' ? <NbaLineupsV2 />
     : path === '/nba-history' ? <NbaHistory /> : path === '/cfb' ? <CfbTotals />
     : path === '/cfb-history' ? <CfbHistory /> : path === '/mlb-games' ? <MlbGamePredictions />
     : path === '/mlb-history' ? <MlbHistory /> : path === '/mlb' ? <MlbOperations />

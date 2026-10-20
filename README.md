@@ -184,7 +184,7 @@ python scripts/update_nba_schedule.py
 python scripts/generate_nba_predictions.py
 ```
 
-After official starters are confirmed, add the ten starters in the **NBA Lineups** dashboard page, then run:
+After official starters are confirmed, choose the game in **NBA Lineups** and click only the starters you want projections for (up to five per team). You do not need to select all ten players. Then run:
 
 ```bash
 python scripts/generate_nba_player_predictions.py

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 
 import requests
 from sqlalchemy import select
@@ -11,6 +12,26 @@ from app.models.nba import NbaGame, NbaPlayerGame
 
 SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
 SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary"
+TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams"
+ROSTER_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{team_id}/roster"
+
+
+def nba_team_roster(team_code: str) -> list[dict]:
+    """Return the current ESPN roster for one NBA abbreviation."""
+    team_id = _nba_team_ids().get(team_code.upper())
+    if team_id is None:
+        return []
+    payload = _get(ROSTER_URL.format(team_id=team_id), {})
+    return [
+        {
+            "player_id": str(player["id"]),
+            "player_name": player.get("displayName", player.get("fullName", "Unknown")),
+            "team": team_code.upper(),
+            "position": player.get("position", {}).get("abbreviation"),
+        }
+        for player in payload.get("athletes", [])
+        if player.get("id")
+    ]
 
 
 def update_nba_schedule(session: Session, start: date | None = None, end: date | None = None) -> int:
@@ -97,6 +118,13 @@ def _get(url: str, params: dict) -> dict:
     response = requests.get(url, params=params, timeout=45)
     response.raise_for_status()
     return response.json()
+
+
+@lru_cache(maxsize=1)
+def _nba_team_ids() -> dict[str, str]:
+    payload = _get(TEAMS_URL, {})
+    teams = payload.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", [])
+    return {entry["team"]["abbreviation"].upper(): str(entry["team"]["id"]) for entry in teams if entry.get("team", {}).get("abbreviation") and entry.get("team", {}).get("id")}
 
 
 def _summary_or_none(event_id: str) -> dict | None:

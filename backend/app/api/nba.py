@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.nba import NbaGame, NbaGamePrediction, NbaPlayerGame, NbaPlayerPrediction, NbaPlayerPredictionResult, NbaStartingLineup
+from app.services.nba_data_service import nba_team_roster
 
 router = APIRouter(prefix="/nba", tags=["nba"])
 
@@ -29,6 +30,24 @@ def games(db: Session = Depends(get_db)):
     return [_game_row(prediction, game) for prediction, game in rows]
 
 
+@router.get("/upcoming-games")
+def upcoming_games(db: Session = Depends(get_db)):
+    rows = db.scalars(
+        select(NbaGame)
+        .where(NbaGame.status == "scheduled", NbaGame.game_date > datetime.now(timezone.utc))
+        .order_by(NbaGame.game_date)
+    ).all()
+    return [
+        {
+            "game_id": game.id,
+            "away_team": game.away_team,
+            "home_team": game.home_team,
+            "date": game.game_date,
+        }
+        for game in rows
+    ]
+
+
 @router.get("/props")
 def props(db: Session = Depends(get_db)):
     rows = db.execute(select(NbaPlayerPrediction, NbaGame).join(NbaGame).where(NbaGame.status == "scheduled", NbaGame.game_date > datetime.now(timezone.utc)).order_by(NbaGame.game_date, NbaPlayerPrediction.team, NbaPlayerPrediction.player_name)).all()
@@ -47,6 +66,14 @@ def lineups(db: Session = Depends(get_db)):
     return [{"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "date": game.game_date, "player_id": lineup.player_id, "player_name": lineup.player_name, "team": lineup.team} for lineup, game in rows]
 
 
+@router.get("/rosters/{game_id}")
+def rosters(game_id: str, db: Session = Depends(get_db)):
+    game = db.get(NbaGame, game_id)
+    if game is None:
+        raise HTTPException(status_code=404, detail="NBA game not found")
+    return {"game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "away": nba_team_roster(game.away_team), "home": nba_team_roster(game.home_team)}
+
+
 @router.post("/lineups")
 def confirm_starter(payload: StarterWrite, db: Session = Depends(get_db)):
     game = db.get(NbaGame, payload.game_id)
@@ -60,6 +87,23 @@ def confirm_starter(payload: StarterWrite, db: Session = Depends(get_db)):
         db.add(NbaStartingLineup(**payload.model_dump(), confirmed_at=datetime.now(timezone.utc)))
         db.commit()
     return {"saved": True}
+
+
+@router.post("/lineups/toggle")
+def toggle_starter(payload: StarterWrite, db: Session = Depends(get_db)):
+    game = db.get(NbaGame, payload.game_id)
+    if game is None or game.status != "scheduled" or payload.team not in {game.home_team, game.away_team}:
+        raise HTTPException(status_code=400, detail="player team must be in an upcoming NBA game")
+    existing = db.scalar(select(NbaStartingLineup).where(NbaStartingLineup.game_id == payload.game_id, NbaStartingLineup.player_id == payload.player_id))
+    if existing:
+        db.delete(existing); db.commit()
+        return {"selected": False}
+    count = db.scalar(select(func.count()).select_from(NbaStartingLineup).where(NbaStartingLineup.game_id == payload.game_id, NbaStartingLineup.team == payload.team))
+    if count >= 5:
+        raise HTTPException(status_code=400, detail="a team can have at most five confirmed starters")
+    db.add(NbaStartingLineup(**payload.model_dump(), confirmed_at=datetime.now(timezone.utc)))
+    db.commit()
+    return {"selected": True}
 
 
 @router.get("/history")

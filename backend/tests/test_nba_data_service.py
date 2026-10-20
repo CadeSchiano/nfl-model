@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import requests
 
 from app.services import nba_data_service
-from app.services.nba_data_service import _made, _minutes, _number, _team_code
+from app.services.nba_data_service import _made, _minutes, _number, _team_code, nba_team_roster
 from app.services.nba_prediction_service import _starter_prediction_cutoff
 
 
@@ -34,3 +34,29 @@ def test_missing_espn_summary_is_skipped(monkeypatch) -> None:
         raise requests.HTTPError(response=response)
     monkeypatch.setattr(nba_data_service, "_get", missing_summary)
     assert nba_data_service._summary_or_none("missing") is None
+
+
+def test_current_roster_maps_espn_players(monkeypatch) -> None:
+    monkeypatch.setattr(nba_data_service, "_nba_team_ids", lambda: {"ATL": "1"})
+    monkeypatch.setattr(
+        nba_data_service,
+        "_get",
+        lambda *_args, **_kwargs: {
+            "athletes": [
+                {
+                    "id": "42",
+                    "displayName": "Example Player",
+                    "position": {"abbreviation": "G"},
+                }
+            ]
+        },
+    )
+
+    assert nba_team_roster("atl") == [
+        {
+            "player_id": "42",
+            "player_name": "Example Player",
+            "team": "ATL",
+            "position": "G",
+        }
+    ]
