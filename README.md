@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/CadeSchiano/nfl-model/actions/workflows/ci.yml/badge.svg)](https://github.com/CadeSchiano/nfl-model/actions/workflows/ci.yml)
 
-A local full-stack sports analytics project centered on NFL pregame game forecasting. The application combines reproducible data-processing scripts, scikit-learn models, a FastAPI/SQLAlchemy API, and a React dashboard to store, inspect, and grade pregame predictions. MLB home-run/game workflows and an FBS-only college-football totals experiment are maintained in separate tables and modules.
+A local full-stack sports analytics project centered on NFL pregame game forecasting. The application combines reproducible data-processing scripts, scikit-learn models, a FastAPI/SQLAlchemy API, and a React dashboard to store, inspect, and grade pregame predictions. NBA, MLB, and FBS-only college-football workflows are maintained in separate tables and modules.
 
 This is an experimental analytics project, not a betting product. Model outputs are probabilities and estimates, not guarantees of outcomes or financial returns.
 
@@ -20,6 +20,7 @@ This is an experimental analytics project, not a betting product. Model outputs 
 ### Additional isolated workflows
 
 - NFL anytime-touchdown ranking with a weekly logistic-regression workflow, active-roster filtering, three core picks plus a usage-qualified longshot per game, immutable HIT/MISS grading, and a simple first-touchdown heuristic based on the top anytime-TD candidate
+- NBA moneyline predictions using rolling team margin plus home-court context, along with PTS/REB/AST/3PM projections only for manually confirmed starters; ESPN public schedule and box-score data is ingested into separate NBA tables
 - Current-week NFL passing, rushing, and receiving-yard projections based on a player’s last five completed games and the opponent’s season average yards allowed; these are analytical estimates, not sportsbook lines or graded betting recommendations
 - MLB game-winner/margin and lineup-gated home-run workflows with local, versioned model artifacts and postgame grading
 - FBS-vs-FBS college-football total-points projections using rolling same-season scoring features and a Ridge model; FCS matchups are excluded
@@ -163,6 +164,33 @@ python backend/scripts/train_models.py
 `generate_features.py` downloads play-by-play data for 2015–2025, so it can take time and requires network access. Trained artifacts are written locally to `backend/app/ml/models/`.
 
 The repository also includes manual scripts for NFL schedule/odds updates, touchdown workflows, MLB ingestion/training/publishing, and CFB totals. Those operational commands call public or key-protected APIs and are deliberately not run by CI. Review the script docstrings before using an operational workflow.
+
+## NBA setup and daily workflow
+
+The first NBA run needs historical box scores so player and team rolling averages are based on completed games:
+
+```bash
+cd nfl-model/backend
+source ../.venv/bin/activate
+python scripts/backfill_nba_history.py
+```
+
+The backfill uses ESPN's public daily scoreboard and may take several minutes. On a normal NBA game day:
+
+```bash
+python scripts/update_nba_results.py
+python scripts/grade_nba_predictions.py
+python scripts/update_nba_schedule.py
+python scripts/generate_nba_predictions.py
+```
+
+After official starters are confirmed, add the ten starters in the **NBA Lineups** dashboard page, then run:
+
+```bash
+python scripts/generate_nba_player_predictions.py
+```
+
+NBA starter projections are not published until a player has been manually confirmed in a starting lineup. MLB routes and data remain in the project but are hidden from the active sidebar during the offseason.
 
 ## Environment variables
 
