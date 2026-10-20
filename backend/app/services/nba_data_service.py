@@ -35,8 +35,9 @@ def update_completed_nba_games(session: Session, start: date | None = None, end:
                 continue
             if not _upsert_game(session, event):
                 continue
-            summary = _get(SUMMARY_URL, {"event": event["id"]})
-            _upsert_boxscore(session, str(event["id"]), summary)
+            summary = _summary_or_none(str(event["id"]))
+            if summary is not None:
+                _upsert_boxscore(session, str(event["id"]), summary)
             imported += 1
     session.commit()
     return imported
@@ -96,6 +97,17 @@ def _get(url: str, params: dict) -> dict:
     response = requests.get(url, params=params, timeout=45)
     response.raise_for_status()
     return response.json()
+
+
+def _summary_or_none(event_id: str) -> dict | None:
+    try:
+        return _get(SUMMARY_URL, {"event": event_id})
+    except requests.HTTPError as error:
+        # ESPN retains some final scoreboard rows but no longer exposes their
+        # player-summary endpoint. Keep the score but omit that box score.
+        if error.response is not None and error.response.status_code == 404:
+            return None
+        raise
 
 
 def _days(start: date, end: date):
