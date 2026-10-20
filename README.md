@@ -190,7 +190,7 @@ After official starters are confirmed, add the ten starters in the **NBA Lineups
 python scripts/generate_nba_player_predictions.py
 ```
 
-NBA starter projections are not published until a player has been manually confirmed in a starting lineup. MLB routes and data remain in the project but are hidden from the active sidebar during the offseason.
+NBA starter projections are not published until a player has been manually confirmed in a starting lineup, and publishing is limited to upcoming games today or tomorrow in Eastern Time. MLB routes and data remain in the project but are hidden from the active sidebar during the offseason.
 
 ## Environment variables
 

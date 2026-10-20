@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,7 +32,10 @@ def publish_nba_game_predictions(session: Session) -> int:
 
 
 def publish_nba_player_predictions(session: Session) -> int:
-    lineups = session.execute(select(NbaStartingLineup, NbaGame).join(NbaGame).where(NbaGame.status == "scheduled", NbaGame.game_date > datetime.now(timezone.utc))).all()
+    """Publish only confirmed-starter props for today and tomorrow (Eastern Time)."""
+    now = datetime.now(timezone.utc)
+    cutoff = _starter_prediction_cutoff(now)
+    lineups = session.execute(select(NbaStartingLineup, NbaGame).join(NbaGame).where(NbaGame.status == "scheduled", NbaGame.game_date > now, NbaGame.game_date < cutoff)).all()
     added = 0
     for lineup, game in lineups:
         if session.scalar(select(NbaPlayerPrediction.id).where(NbaPlayerPrediction.game_id == game.id, NbaPlayerPrediction.player_id == lineup.player_id)):
@@ -66,3 +70,8 @@ def _team_margin(session: Session, team: str, before: datetime) -> tuple[float, 
     if not games: return 0.0, 0
     margins = [(game.home_score - game.away_score) if game.home_team == team else (game.away_score - game.home_score) for game in games]
     return sum(margins) / len(margins), len(games)
+
+
+def _starter_prediction_cutoff(now: datetime) -> datetime:
+    eastern = ZoneInfo("America/New_York")
+    return datetime.combine(now.astimezone(eastern).date() + timedelta(days=2), time.min, tzinfo=eastern).astimezone(timezone.utc)
