@@ -33,7 +33,8 @@ def update_completed_nba_games(session: Session, start: date | None = None, end:
         for event in _get(SCOREBOARD_URL, {"dates": day.strftime("%Y%m%d"), "limit": 100}).get("events", []):
             if event.get("status", {}).get("type", {}).get("name") != "STATUS_FINAL":
                 continue
-            _upsert_game(session, event)
+            if not _upsert_game(session, event):
+                continue
             summary = _get(SUMMARY_URL, {"event": event["id"]})
             _upsert_boxscore(session, str(event["id"]), summary)
             imported += 1
@@ -45,12 +46,17 @@ def _upsert_game(session: Session, event: dict) -> bool:
     competition = event["competitions"][0]
     teams = {item["homeAway"]: item for item in competition["competitors"]}
     home, away = teams["home"], teams["away"]
+    home_code, away_code = _team_code(home), _team_code(away)
+    # ESPN occasionally returns placeholder/exhibition events without a usable
+    # NBA abbreviation in historical scoreboards. They cannot be modeled safely.
+    if not home_code or not away_code:
+        return False
     final = event.get("status", {}).get("type", {}).get("name") == "STATUS_FINAL"
     season = int(event.get("season", {}).get("year", datetime.fromisoformat(event["date"].replace("Z", "+00:00")).year)) - 1
     values = {
         "season": season,
         "game_date": datetime.fromisoformat(event["date"].replace("Z", "+00:00")),
-        "home_team": home["team"]["abbreviation"], "away_team": away["team"]["abbreviation"],
+        "home_team": home_code, "away_team": away_code,
         "home_score": int(home.get("score", 0)) if final else None,
         "away_score": int(away.get("score", 0)) if final else None,
         "status": "final" if final else "scheduled",
@@ -112,3 +118,8 @@ def _minutes(value: str | None) -> float:
     parts = value.split(":")
     try: return float(parts[0]) + (float(parts[1]) / 60 if len(parts) > 1 else 0)
     except ValueError: return 0.0
+
+
+def _team_code(competitor: dict) -> str | None:
+    code = competitor.get("team", {}).get("abbreviation")
+    return str(code).strip().upper() if code else None
