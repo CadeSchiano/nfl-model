@@ -54,6 +54,64 @@ def props(db: Session = Depends(get_db)):
     return [{"id": prediction.id, "game_id": game.id, "away_team": game.away_team, "home_team": game.home_team, "date": game.game_date, "player_name": prediction.player_name, "team": prediction.team, "projected_points": prediction.projected_points, "projected_rebounds": prediction.projected_rebounds, "projected_assists": prediction.projected_assists, "projected_threes": prediction.projected_threes} for prediction, game in rows]
 
 
+@router.get("/props/history")
+def prop_history_games(db: Session = Depends(get_db)):
+    """One row per completed game that has graded starter projections."""
+    rows = db.execute(
+        select(NbaGame, func.count(NbaPlayerPredictionResult.prediction_id).label("prop_count"))
+        .join(NbaPlayerPrediction, NbaPlayerPrediction.game_id == NbaGame.id)
+        .join(NbaPlayerPredictionResult, NbaPlayerPredictionResult.prediction_id == NbaPlayerPrediction.id)
+        .group_by(NbaGame.id)
+        .order_by(NbaGame.game_date.desc())
+    ).all()
+    return [
+        {
+            "game_id": game.id,
+            "away_team": game.away_team,
+            "home_team": game.home_team,
+            "date": game.game_date,
+            "prop_count": prop_count,
+        }
+        for game, prop_count in rows
+    ]
+
+
+@router.get("/props/history/{game_id}")
+def prop_history_game(game_id: str, db: Session = Depends(get_db)):
+    """Projection-versus-actual rows for one completed NBA game."""
+    game = db.get(NbaGame, game_id)
+    if game is None:
+        raise HTTPException(status_code=404, detail="NBA game not found")
+    rows = db.execute(
+        select(NbaPlayerPrediction, NbaPlayerPredictionResult)
+        .join(NbaPlayerPredictionResult, NbaPlayerPredictionResult.prediction_id == NbaPlayerPrediction.id)
+        .where(NbaPlayerPrediction.game_id == game_id)
+        .order_by(NbaPlayerPrediction.team, NbaPlayerPrediction.player_name)
+    ).all()
+    return {
+        "game_id": game.id,
+        "away_team": game.away_team,
+        "home_team": game.home_team,
+        "date": game.game_date,
+        "players": [
+            {
+                "player_name": prediction.player_name,
+                "team": prediction.team,
+                "projected_points": prediction.projected_points,
+                "actual_points": result.actual_points,
+                "projected_rebounds": prediction.projected_rebounds,
+                "actual_rebounds": result.actual_rebounds,
+                "projected_assists": prediction.projected_assists,
+                "actual_assists": result.actual_assists,
+                "projected_threes": prediction.projected_threes,
+                "actual_threes": result.actual_threes,
+                "model_version": prediction.model_version,
+            }
+            for prediction, result in rows
+        ],
+    }
+
+
 @router.get("/players")
 def players(query: str = Query(min_length=2), db: Session = Depends(get_db)):
     rows = db.execute(select(NbaPlayerGame.player_id, NbaPlayerGame.player_name, NbaPlayerGame.team).where(NbaPlayerGame.player_name.ilike(f"%{query}%")).group_by(NbaPlayerGame.player_id, NbaPlayerGame.player_name, NbaPlayerGame.team).order_by(NbaPlayerGame.player_name).limit(30)).all()

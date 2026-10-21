@@ -173,6 +173,32 @@ function NbaLineupsV2() {
   </>
 }
 function NbaHistory() { const data = useData('/nba/history'); if (data.loading) return <Loading />; if (data.error) return <Empty>NBA history is unavailable.</Empty>; const { game_record: record, games, players } = data.data; return <><h1>NBA history</h1><div className="metric-grid"><article><p>Moneyline record</p><b>{record.wins}-{record.losses}</b><small>{pct(record.accuracy)} accuracy</small></article></div><h2>Game predictions</h2>{games.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Model pick</th><th>Result</th></tr></thead><tbody>{games.map(game => <tr key={game.id}><td>{game.away_team} @ {game.home_team}</td><td>{game.model_pick}</td><td className={game.result === 'WIN' ? 'accent' : ''}>{game.result}</td></tr>)}</tbody></table></div> : <Empty>No graded NBA game predictions yet.</Empty>}<h2>Starter-prop results</h2>{players.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th></tr></thead><tbody>{players.map((row, index) => <tr key={`${row.player_name}-${index}`}><td>{row.player_name}</td><td>{row.projected_points.toFixed(1)} → {row.actual_points}</td><td>{row.projected_rebounds.toFixed(1)} → {row.actual_rebounds}</td><td>{row.projected_assists.toFixed(1)} → {row.actual_assists}</td><td>{row.projected_threes.toFixed(1)} → {row.actual_threes}</td></tr>)}</tbody></table></div> : <Empty>No graded NBA starter props yet.</Empty>}</> }
+function NbaPropHistoryDetail({ gameId }) {
+  const data = useData(`/nba/props/history/${gameId}`)
+  if (data.loading) return <Loading />
+  if (data.error) return <Empty>That NBA player-prop history game is unavailable.</Empty>
+  const game = data.data
+  return <>
+    <a className="back" href="/nba-history">← NBA history</a>
+    <section className="hero"><p className="eyebrow">GRADED STARTER PROPS</p><h1>{game.away_team} @ {game.home_team}</h1><p>{easternTime(game.date)} · Every projection is preserved next to the player’s actual final stat line.</p></section>
+    {game.players.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>Team</th><th>Projected PTS</th><th>Actual PTS</th><th>Projected REB</th><th>Actual REB</th><th>Projected AST</th><th>Actual AST</th><th>Projected 3PM</th><th>Actual 3PM</th></tr></thead><tbody>{game.players.map(player => <tr key={`${player.team}-${player.player_name}`}><td className="accent">{player.player_name}</td><td>{player.team}</td><td>{player.projected_points.toFixed(1)}</td><td>{player.actual_points}</td><td>{player.projected_rebounds.toFixed(1)}</td><td>{player.actual_rebounds}</td><td>{player.projected_assists.toFixed(1)}</td><td>{player.actual_assists}</td><td>{player.projected_threes.toFixed(1)}</td><td>{player.actual_threes}</td></tr>)}</tbody></table></div> : <Empty>No graded starter props were saved for this game.</Empty>}
+  </>
+}
+function NbaHistoryV2() {
+  const history = useData('/nba/history')
+  const propGames = useData('/nba/props/history')
+  if (history.loading || propGames.loading) return <Loading />
+  if (history.error || propGames.error) return <Empty>NBA history is unavailable.</Empty>
+  const { game_record: record, games } = history.data
+  return <>
+    <section className="hero"><p className="eyebrow">NBA MODEL HISTORY</p><h1>NBA history</h1><p>Open any completed game below to compare every saved starter projection with that player’s actual final stat line.</p></section>
+    <div className="metric-grid"><article><p>Moneyline record</p><b>{record.wins}-{record.losses}</b><small>{pct(record.accuracy)} accuracy</small></article><article><p>Graded prop games</p><b>{propGames.data.length}</b><small>Games with at least one saved starter projection</small></article></div>
+    <h2>Starter-prop history by game</h2>
+    {propGames.data.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Game time</th><th>Graded players</th><th>Details</th></tr></thead><tbody>{propGames.data.map(game => <tr key={game.game_id}><td>{game.away_team} @ {game.home_team}</td><td>{easternTime(game.date)}</td><td>{game.prop_count}</td><td><a href={`/nba-history/${game.game_id}`}>View projected vs actual →</a></td></tr>)}</tbody></table></div> : <Empty>No NBA starter props have been graded yet. Run the NBA results update and grading scripts after games finish.</Empty>}
+    <h2>Moneyline results</h2>
+    {games.length ? <div className="table-wrap"><table><thead><tr><th>Matchup</th><th>Model pick</th><th>Result</th></tr></thead><tbody>{games.map(game => <tr key={game.id}><td>{game.away_team} @ {game.home_team}</td><td>{game.model_pick}</td><td className={game.result === 'WIN' ? 'accent' : ''}>{game.result}</td></tr>)}</tbody></table></div> : <Empty>No graded NBA game predictions yet.</Empty>}
+  </>
+}
 function BatterSearch() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -240,7 +266,8 @@ function AppV2() {
     : path === '/nfl-players' ? <NflPlayerStats /> : path === '/performance' ? <Performance />
     : path === '/history' ? <History /> : path === '/nba-games' ? <NbaGames />
     : path === '/nba-props' ? <NbaProps /> : path === '/nba-lineups' ? <NbaLineupsV2 />
-    : path === '/nba-history' ? <NbaHistory /> : path === '/cfb' ? <CfbTotals />
+    : path.startsWith('/nba-history/') ? <NbaPropHistoryDetail gameId={decodeURIComponent(path.slice('/nba-history/'.length))} />
+    : path === '/nba-history' ? <NbaHistoryV2 /> : path === '/cfb' ? <CfbTotals />
     : path === '/cfb-history' ? <CfbHistory /> : path === '/mlb-games' ? <MlbGamePredictions />
     : path === '/mlb-history' ? <MlbHistory /> : path === '/mlb' ? <MlbOperations />
     : path === '/methodology' ? <Methodology /> : <Dashboard />
