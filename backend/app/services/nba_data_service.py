@@ -54,7 +54,12 @@ def update_completed_nba_games(session: Session, start: date | None = None, end:
         for event in _get(SCOREBOARD_URL, {"dates": day.strftime("%Y%m%d"), "limit": 100}).get("events", []):
             if event.get("status", {}).get("type", {}).get("name") != "STATUS_FINAL":
                 continue
-            if not _upsert_game(session, event):
+            # Scheduled games already exist after the pregame schedule run.  They
+            # still need their final box score fetched once ESPN marks them final.
+            # `_upsert_game` returns false both for existing rows and malformed
+            # placeholder events, so use the persisted row to distinguish them.
+            _upsert_game(session, event)
+            if session.get(NbaGame, str(event["id"])) is None:
                 continue
             summary = _summary_or_none(str(event["id"]))
             if summary is not None:

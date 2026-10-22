@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import requests
 
 from app.services import nba_data_service
-from app.services.nba_data_service import _made, _minutes, _number, _team_code, nba_team_roster
+from app.services.nba_data_service import _made, _minutes, _number, _team_code, nba_team_roster, update_completed_nba_games
 from app.services.nba_prediction_service import _starter_prediction_cutoff
 
 
@@ -60,3 +60,26 @@ def test_current_roster_maps_espn_players(monkeypatch) -> None:
             "position": "G",
         }
     ]
+
+
+def test_existing_scheduled_game_still_fetches_final_box_score(monkeypatch) -> None:
+    event = {
+        "id": "final-game",
+        "status": {"type": {"name": "STATUS_FINAL"}},
+    }
+    fetched = []
+
+    class FakeSession:
+        def get(self, _model, game_id):
+            return object() if game_id == "final-game" else None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(nba_data_service, "_get", lambda *_args, **_kwargs: {"events": [event]})
+    monkeypatch.setattr(nba_data_service, "_upsert_game", lambda *_args: False)
+    monkeypatch.setattr(nba_data_service, "_summary_or_none", lambda game_id: fetched.append(game_id) or {})
+    monkeypatch.setattr(nba_data_service, "_upsert_boxscore", lambda *_args: None)
+
+    assert update_completed_nba_games(FakeSession(), date(2026, 10, 21), date(2026, 10, 21)) == 1
+    assert fetched == ["final-game"]
